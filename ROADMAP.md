@@ -26,10 +26,12 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
 | Cliente Qdrant | `qdrant-client`, `AsyncQdrantClient`, instancia única compartida con **timeout explícito y retries con backoff** configurados desde el arranque — nunca timeout infinito por defecto |
 | Superficie MCP | Todo expuesto como `tools` (sin `resources`) — un único patrón de diseño en todas las fases, menos decisiones por endpoint. Revisable en la Fase 7 si para entonces hay un caso de uso concreto que lo justifique |
 | Licencia | MIT |
+| Paquete PyPI | `mcp-qdrant` — `qdrant-mcp` y `qdrant-mcp-server` ya están ocupados por proyectos de terceros no relacionados (comprobado en PyPI 2026-08-27), fijado ahora para no rehacer `pyproject.toml`/imports en la Fase 7 |
 | Gestión de deps | `uv` |
 | Transporte | `stdio` por defecto (Claude Desktop/Code); `streamable-http` opcional para uso remoto, protegido con un secreto compartido por variable de entorno — sin OAuth ni multi-usuario, no hay ese caso de uso |
-| Config | variables de entorno: `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_LOCAL_PATH`, `QDRANT_MCP_READ_ONLY`, `QDRANT_MCP_TRANSPORT` — sin perfiles YAML, eso era complejidad del RAG-build |
+| Config | variables de entorno: `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_LOCAL_PATH`, `QDRANT_MCP_READ_ONLY`, `QDRANT_MCP_TRANSPORT`, `QDRANT_MCP_TOOLSETS` (lista de grupos de tools a registrar, p.ej. `core,search`; por defecto todos) — sin perfiles YAML, eso era complejidad del RAG-build |
 | Validación | Pydantic en cada input de tool, errores estructurados (nunca `except` mudo) |
+| Tool annotations | Cada tool declara `readOnlyHint`/`destructiveHint`/`idempotentHint` desde que se registra (Fase 1 en adelante) — habilita autoaprobación segura en el cliente, no se deja para el hardening de la Fase 7 |
 | Testing | `pytest` (unit con client mockeado + integración contra Qdrant real vía Docker, versión mínima soportada fijada en CI), `ruff`, `mypy`, `pre-commit` |
 | CI | GitHub Actions: lint + typecheck + tests en cada PR |
 | Doc de tools | Generada automáticamente desde los schemas Pydantic (script + check en CI) a partir de la Fase 7 — no se mantiene a mano |
@@ -46,7 +48,8 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
 - Tag semver (`vX.Y.Z`) por release, `CHANGELOG.md` en formato Keep a Changelog.
 
 **Definition of Done por rama:**
-1. Tools registradas + schema Pydantic validado.
+1. Tools registradas + schema Pydantic validado + annotations MCP
+   (`readOnlyHint`/`destructiveHint`/`idempotentHint`) + toolset asignado.
 2. Tests unitarios (mock) y, si la tool muta estado, al menos un test de integración
    contra el Qdrant real de CI (no basta con el mock).
 3. `ruff check`, `mypy`, `pytest` en verde.
@@ -59,11 +62,16 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
 
 ### Fase 0 — `feat/project-scaffold` → v0.0.1
 
-- Repo, `pyproject.toml` (build backend excluye `/website` del paquete cuando exista),
-  entrypoint CLI, esqueleto `FastMCP` vacío.
+- Repo, `pyproject.toml` (nombre de paquete `mcp-qdrant`, build backend excluye
+  `/website` del paquete cuando exista), entrypoint CLI, esqueleto `FastMCP` vacío.
 - `ruff` + `mypy` + `pytest` + `pre-commit`, GitHub Actions (lint + typecheck + tests).
 - Conexión a Qdrant (`QDRANT_URL`/`QDRANT_API_KEY`/`QDRANT_LOCAL_PATH`) vía el
   `AsyncQdrantClient` compartido descrito en la tabla de arquitectura.
+- Mecanismo de registro de tools por *toolset* (`core`, `search`, `payload`,
+  `snapshots`, `admin`, `observability` — uno por Fase 1-6), filtrable con
+  `QDRANT_MCP_TOOLSETS`. El scaffold solo define el mecanismo; cada fase registra
+  su propio grupo al añadir sus tools — evita rediseñar esto cuando el catálogo
+  crezca a 60-70 tools en la Fase 6.
 - `qdrant_health_check`: tool de humo que valida el pipeline end-to-end.
 - CI fija una **versión mínima de Qdrant server soportada**, levantada como servicio
   Docker en el propio workflow — la misma imagen se reutiliza en las fases posteriores
@@ -142,7 +150,9 @@ en `docs/` cómo levantarlo en local.
 ### Fase 7 — `feat/packaging-and-dx` → v1.0.0
 Hardening y distribución, no tools nuevas.
 
-- Modo `QDRANT_MCP_READ_ONLY` global que bloquea toda tool mutante.
+- Modo `QDRANT_MCP_READ_ONLY` global que bloquea toda tool mutante en tiempo de
+  ejecución (complementa los `destructiveHint` declarados desde la Fase 1, que son
+  informativos para el cliente, no un bloqueo real).
 - Descripciones de tools ricas + ejemplos (afecta a qué tan bien las elige el LLM).
 - Publicación en PyPI, imagen Docker, manifest para Claude Desktop (`.mcpb`).
 - Tabla de tools del README pasa a generarse automáticamente desde los schemas
