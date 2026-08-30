@@ -60,7 +60,7 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
 
 ## Fases
 
-### Fase 0 — `feat/project-scaffold` → v0.0.1
+### Fase 0 — `feat/project-scaffold` → v0.0.1 ✅ Cerrada (mergeada en `main`, tag `v0.0.1`)
 
 - Repo, `pyproject.toml` (nombre de paquete `mcp-qdrant`, build backend excluye
   `/website` del paquete cuando exista), entrypoint CLI, esqueleto `MCPServer` vacío.
@@ -86,7 +86,7 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
   para los tests de integración.
 - `LICENSE` (MIT), `.github/dependabot.yml`, plantillas mínimas de issue/PR.
 
-### Fase 1 — `feat/core-collections-points` → v0.1.0 (MVP real)
+### Fase 1 — `feat/core-collections-points` → v0.1.0 (MVP real) ✅ Cerrada (commiteada en `feat/core-collections-points`, pendiente de merge)
 CRUD completo de colecciones y points + búsqueda vectorial básica. Con esto ya es un MCP
 usable de punta a punta y muy por encima del oficial.
 
@@ -153,6 +153,14 @@ algunas tools solo aplican con cluster real.
 integración corren contra un **cluster Qdrant multi-nodo levantado con
 `docker-compose`**, no contra el nodo único de CI de las fases anteriores — documentar
 en `docs/` cómo levantarlo en local.
+
+**Hallazgo verificado durante Fase 0** (release notes reales de `qdrant/qdrant`, no
+memoria): el resharding real de `qdrant_collection_cluster_update` (`start_resharding`
+y compañía) es **exclusivo de Qdrant Cloud** — en self-hosted/open-source (la imagen
+`qdrant/qdrant` que usa este repo en CI) el endpoint existe pero no reequilibra nada de
+verdad. Consecuencia para el DoD: `qdrant_collection_cluster_update` solo puede
+testearse con mocks (construcción del payload), nunca con una aserción de integración
+real de que el resharding ocurrió, ni siquiera contra el cluster multi-nodo de arriba.
 
 ### Fase 6 — `feat/service-observability` → v0.6.0
 
