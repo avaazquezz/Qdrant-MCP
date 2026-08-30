@@ -22,8 +22,8 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
 | Área | Decisión |
 |---|---|
 | Lenguaje | Python 3.12+ |
-| SDK MCP | paquete oficial `mcp`, `MCPServer` (sucesor de `FastMCP` desde `mcp>=2.0`, protocolo stateless) — no confundir con el paquete de terceros `fastmcp`; fijar versión exacta en PyPI al bootstrapear (comprobado 2026-08-30: `mcp` v2 renombró `FastMCP`→`MCPServer`) |
-| Cliente Qdrant | `qdrant-client`, `AsyncQdrantClient`, instancia única compartida con **timeout explícito y retries con backoff** configurados desde el arranque — nunca timeout infinito por defecto |
+| SDK MCP | paquete oficial `mcp`, `MCPServer` (sucesor de `FastMCP` desde `mcp>=2.0`, protocolo stateless) — no confundir con el paquete de terceros `fastmcp`; fijar versión exacta en PyPI al bootstrapear (comprobado 2026-08-30: `mcp` v2 renombró `FastMCP`→`MCPServer`); `protocolVersion` objetivo `2026-07-28` o posterior (modo stateless, `server/discover` obligatorio) |
+| Cliente Qdrant | `qdrant-client`, `AsyncQdrantClient`, instancia única compartida con **timeout explícito** y **retries con backoff vía `tenacity`** (el propio `qdrant-client` solo expone `timeout`, no retry nativo) configurados desde el arranque — nunca timeout infinito por defecto |
 | Superficie MCP | Todo expuesto como `tools` (sin `resources`) — un único patrón de diseño en todas las fases, menos decisiones por endpoint. Revisable en la Fase 7 si para entonces hay un caso de uso concreto que lo justifique |
 | Licencia | MIT |
 | Paquete PyPI | `mcp-qdrant` — `qdrant-mcp` y `qdrant-mcp-server` ya están ocupados por proyectos de terceros no relacionados (comprobado en PyPI 2026-08-27), fijado ahora para no rehacer `pyproject.toml`/imports en la Fase 7 |
