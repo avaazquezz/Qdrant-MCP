@@ -22,14 +22,14 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
 | Área | Decisión |
 |---|---|
 | Lenguaje | Python 3.12+ |
-| SDK MCP | paquete oficial `mcp` (`FastMCP`) — fijar versión exacta en PyPI al bootstrapear |
+| SDK MCP | paquete oficial `mcp`, `MCPServer` (sucesor de `FastMCP` desde `mcp>=2.0`, protocolo stateless) — no confundir con el paquete de terceros `fastmcp`; fijar versión exacta en PyPI al bootstrapear (comprobado 2026-08-30: `mcp` v2 renombró `FastMCP`→`MCPServer`) |
 | Cliente Qdrant | `qdrant-client`, `AsyncQdrantClient`, instancia única compartida con **timeout explícito y retries con backoff** configurados desde el arranque — nunca timeout infinito por defecto |
 | Superficie MCP | Todo expuesto como `tools` (sin `resources`) — un único patrón de diseño en todas las fases, menos decisiones por endpoint. Revisable en la Fase 7 si para entonces hay un caso de uso concreto que lo justifique |
 | Licencia | MIT |
 | Paquete PyPI | `mcp-qdrant` — `qdrant-mcp` y `qdrant-mcp-server` ya están ocupados por proyectos de terceros no relacionados (comprobado en PyPI 2026-08-27), fijado ahora para no rehacer `pyproject.toml`/imports en la Fase 7 |
 | Gestión de deps | `uv` |
 | Transporte | `stdio` por defecto (Claude Desktop/Code); `streamable-http` opcional para uso remoto, protegido con un secreto compartido por variable de entorno — sin OAuth ni multi-usuario, no hay ese caso de uso |
-| Config | variables de entorno: `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_LOCAL_PATH`, `QDRANT_MCP_READ_ONLY`, `QDRANT_MCP_TRANSPORT`, `QDRANT_MCP_TOOLSETS` (lista de grupos de tools a registrar, p.ej. `core,search`; por defecto todos) — sin perfiles YAML, eso era complejidad del RAG-build |
+| Config | variables de entorno: `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_LOCAL_PATH`, `QDRANT_MCP_READ_ONLY`, `QDRANT_MCP_TRANSPORT`, `QDRANT_MCP_TOOLSETS` (lista de grupos de tools a registrar, p.ej. `core,search`; por defecto solo `core`, el resto es opt-in explícito para no exponer de golpe ~70 tools solapadas) — sin perfiles YAML, eso era complejidad del RAG-build |
 | Validación | Pydantic en cada input de tool, errores estructurados (nunca `except` mudo) |
 | Tool annotations | Cada tool declara `readOnlyHint`/`destructiveHint`/`idempotentHint` desde que se registra (Fase 1 en adelante) — habilita autoaprobación segura en el cliente, no se deja para el hardening de la Fase 7 |
 | Testing | `pytest` (unit con client mockeado + integración contra Qdrant real vía Docker, versión mínima soportada fijada en CI), `ruff`, `mypy`, `pre-commit` |
@@ -63,7 +63,7 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
 ### Fase 0 — `feat/project-scaffold` → v0.0.1
 
 - Repo, `pyproject.toml` (nombre de paquete `mcp-qdrant`, build backend excluye
-  `/website` del paquete cuando exista), entrypoint CLI, esqueleto `FastMCP` vacío.
+  `/website` del paquete cuando exista), entrypoint CLI, esqueleto `MCPServer` vacío.
 - `ruff` + `mypy` + `pytest` + `pre-commit`, GitHub Actions (lint + typecheck + tests).
 - Conexión a Qdrant (`QDRANT_URL`/`QDRANT_API_KEY`/`QDRANT_LOCAL_PATH`) vía el
   `AsyncQdrantClient` compartido descrito en la tabla de arquitectura.
@@ -72,6 +72,14 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
   `QDRANT_MCP_TOOLSETS`. El scaffold solo define el mecanismo; cada fase registra
   su propio grupo al añadir sus tools — evita rediseñar esto cuando el catálogo
   crezca a 60-70 tools en la Fase 6.
+- Guardarraíl mínimo de `QDRANT_MCP_READ_ONLY`: decorador que bloquea el registro/
+  ejecución de toda tool anotada `destructiveHint=true` cuando la variable está
+  activa. El scaffold no tiene tools mutantes propias, pero el mecanismo queda listo
+  para que la Fase 1 en adelante lo herede desde el primer commit — no se deja para
+  la Fase 7.
+- Logging configurado a **stderr** desde el arranque (nunca stdout con transporte
+  `stdio`, rompe el framing JSON-RPC) — con check en CI que falla si algo escribe a
+  stdout fuera del framing MCP.
 - `qdrant_health_check`: tool de humo que valida el pipeline end-to-end.
 - CI fija una **versión mínima de Qdrant server soportada**, levantada como servicio
   Docker en el propio workflow — la misma imagen se reutiliza en las fases posteriores
@@ -87,6 +95,9 @@ usable de punta a punta y muy por encima del oficial.
 - `qdrant_query` (Query points: vector + filtro + límite, API unificada moderna).
   El schema Pydantic ships solo con lo anterior en esta fase — `prefetch`/`fusion`
   (hybrid search) llegan en la Fase 2, no hace falta diseñarlos ya.
+- Descripciones de tools ricas + ejemplos desde esta fase (no se pospone a la
+  Fase 7): con `query`/`search`/`recommend`/`discover` solapándose a partir de la
+  Fase 2, el LLM necesita desambiguación desde el MVP.
 
 ### Fase 2 — `feat/search-advanced` → v0.2.0
 Todo lo demás bajo "Search" en la API de Qdrant.
@@ -131,6 +142,10 @@ algunas tools solo aplican con cluster real.
 
 - `qdrant_alias_update` (create/rename/delete), `_list`, `_list_all`
 - `qdrant_cluster_status`, `_info`, `_recover`, `_peer_remove`
+- `qdrant_collection_cluster_update` (rebalanceo real: `move_shard`, `replicate_shard`,
+  `abort_transfer`, `drop_replica`, `create_sharding_key`, `delete_sharding_key`,
+  `start_resharding`, `abort_resharding`, `restart_transfer`) — sin esto la fase no
+  cumple lo que promete su propio nombre (cluster-admin)
 - `qdrant_shard_key_create`, `_delete`, `_list`
 - `qdrant_shard_snapshot_create`, `_list`, `_download`, `_delete`, `_recover`
 
@@ -148,12 +163,10 @@ en `docs/` cómo levantarlo en local.
   cambiar sin previo aviso)
 
 ### Fase 7 — `feat/packaging-and-dx` → v1.0.0
-Hardening y distribución, no tools nuevas.
+Hardening y distribución, no tools nuevas. (El guardarraíl `QDRANT_MCP_READ_ONLY` y
+las descripciones ricas de tools ya se resolvieron en Fase 0 y Fase 1
+respectivamente — no se repiten aquí.)
 
-- Modo `QDRANT_MCP_READ_ONLY` global que bloquea toda tool mutante en tiempo de
-  ejecución (complementa los `destructiveHint` declarados desde la Fase 1, que son
-  informativos para el cliente, no un bloqueo real).
-- Descripciones de tools ricas + ejemplos (afecta a qué tan bien las elige el LLM).
 - Publicación en PyPI, imagen Docker, manifest para Claude Desktop (`.mcpb`).
 - Tabla de tools del README pasa a generarse automáticamente desde los schemas
   Pydantic (`scripts/gen_tools_doc.py` + check en CI que falla si el README diverge) —
