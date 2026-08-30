@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --dev
+      - run: uv run mypy
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.13.6
+        ports:
+          - 6333:6333
+    env:
+      QDRANT_URL: "http://localhost:6333"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --dev
+      - name: Wait for Qdrant to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:6333/readyz > /dev/null 2>&1; then
+              echo "Qdrant is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Qdrant did not become ready in time" >&2
+          exit 1
+      - run: uv run pytest
