@@ -9,7 +9,10 @@ from mcp_qdrant.server import build_server
 async def test_build_server_registers_default_toolset() -> None:
     server = build_server(Settings.from_env({}))
     tools = await server.list_tools()
-    assert [t.name for t in tools] == ["qdrant_health_check"]
+    assert "qdrant_health_check" in [t.name for t in tools]
+    assert "qdrant_collection_create" in [t.name for t in tools]
+    assert "qdrant_query" in [t.name for t in tools]
+    assert len(tools) == 13
 
 
 async def test_build_server_respects_disabled_toolsets() -> None:
