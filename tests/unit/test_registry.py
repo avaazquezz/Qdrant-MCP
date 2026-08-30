@@ -41,3 +41,15 @@ async def test_read_only_allows_non_destructive_tool() -> None:
     registry = ToolRegistry(server, enabled_toolsets=("core",), read_only=True)
     registry.register(noop_tool, toolset="core", annotations=READ_ONLY)
     assert [t.name for t in await server.list_tools()] == ["noop_tool"]
+
+
+async def test_read_only_blocks_non_destructive_mutation() -> None:
+    """A tool that mutates but isn't destructive (e.g. collection_create) must
+    still be blocked: QDRANT_MCP_READ_ONLY means no writes, not just no deletes."""
+    mutating_non_destructive = ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=False
+    )
+    server: MCPServer[None] = MCPServer(name="test-server")
+    registry = ToolRegistry(server, enabled_toolsets=("core",), read_only=True)
+    registry.register(noop_tool, toolset="core", annotations=mutating_non_destructive)
+    assert await server.list_tools() == []

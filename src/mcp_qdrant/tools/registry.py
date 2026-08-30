@@ -48,9 +48,9 @@ class ToolRegistry:
         if toolset not in self._enabled_toolsets:
             logger.debug("Skipping tool %r: toolset %r not enabled", fn.__name__, toolset)
             return
-        if self._read_only and annotations.destructive_hint:
+        if self._read_only and not annotations.read_only_hint:
             logger.info(
-                "Skipping tool %r: destructive_hint=True and QDRANT_MCP_READ_ONLY is set",
+                "Skipping tool %r: read_only_hint is not True and QDRANT_MCP_READ_ONLY is set",
                 fn.__name__,
             )
             return

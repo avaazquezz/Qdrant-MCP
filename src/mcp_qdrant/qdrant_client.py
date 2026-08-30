@@ -30,12 +30,15 @@ def build_qdrant_client(settings: Settings) -> AsyncQdrantClient:
     )
 
 
-@retry(
+qdrant_retry = retry(
     retry=retry_if_exception_type(ResponseHandlingException),
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
     reraise=True,
 )
+
+
+@qdrant_retry
 async def ping(client: AsyncQdrantClient) -> int:
     """Cheap read-only connectivity probe: list collections, return the count.
 
