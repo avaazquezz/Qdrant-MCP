@@ -99,18 +99,32 @@ usable de punta a punta y muy por encima del oficial.
   Fase 7): con `query`/`search`/`recommend`/`discover` solapándose a partir de la
   Fase 2, el LLM necesita desambiguación desde el MVP.
 
-### Fase 2 — `feat/search-advanced` → v0.2.0 🔄 Abierta (rama `feat/search-advanced` creada, sin tools todavía)
+### Fase 2 — `feat/search-advanced` → v0.2.0 ✅ Cerrada
 Todo lo demás bajo "Search" en la API de Qdrant.
 
-- `qdrant_query_batch`, `qdrant_query_groups`
-- `qdrant_query`/`_batch`/`_groups` (heredadas de la Fase 1) se extienden aquí con
-  `prefetch` + `fusion` (RRF/DBSF) para hybrid search, y `using`/`lookup_from` para
-  multivectores y búsquedas cruzando vectores nombrados
-- `qdrant_search`, `qdrant_search_batch`, `qdrant_search_groups` (legacy, para clientes
-  que aún no usan Query API)
+- `qdrant_query` (heredada de la Fase 1, toolset `core` sin cambios) se extiende aquí
+  con `prefetch` + `fusion` (RRF/DBSF) para hybrid search, y `using`/`lookup_from` para
+  vectores nombrados y búsquedas cruzando colecciones
+- `qdrant_query_batch`, `qdrant_query_groups` (toolset `search`, mismas formas de query
+  que `qdrant_query`)
 - `qdrant_recommend`, `qdrant_recommend_batch`, `qdrant_recommend_groups`
 - `qdrant_discover`, `qdrant_discover_batch`
-- `qdrant_distance_matrix` (pairs/offsets)
+- `qdrant_distance_matrix_pairs`, `qdrant_distance_matrix_offsets`
+
+**Hallazgo verificado durante la Fase 2** (introspección directa de
+`qdrant-client==1.19.0`, el pinneado en `pyproject.toml`, no de la doc HTTP de Qdrant
+que usó la redacción original de este roadmap): `AsyncQdrantClient` en esta versión no
+expone `search`, `search_batch`, `search_groups`, `recommend`, `recommend_batch`,
+`recommend_groups`, `discover` ni `discover_batch` — ni siquiera en su capa REST de
+bajo nivel (`qdrant_client.http.api.search_api` solo tiene `query_points`,
+`query_batch_points`, `query_points_groups`, `search_matrix_pairs`,
+`search_matrix_offsets`). Todo quedó consolidado en la Query API unificada.
+Consecuencia: **`qdrant_search`/`_batch`/`_groups` (planeadas originalmente como
+"legacy") se eliminan del catálogo** — duplicarían `qdrant_query` sin ninguna
+capacidad real detrás, y envolverlas exigiría saltarse el SDK pinneado con HTTP
+crudo, contra la decisión de arquitectura de la Fase 0. `qdrant_recommend`/`_batch`/
+`_groups` y `qdrant_discover`/`_batch` no se ven afectadas: son query types reales
+(`RecommendQuery`/`DiscoverQuery`) construidos sobre `query_points`.
 
 ### Fase 3 — `feat/payload-indexing-vectors` → v0.3.0
 Payload, indexing y vectores nombrados — incluye extender los schemas de
