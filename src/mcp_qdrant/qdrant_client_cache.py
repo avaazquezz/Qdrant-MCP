@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import OrderedDict
+from urllib.parse import urlsplit
 
 from qdrant_client import AsyncQdrantClient
 
@@ -35,7 +36,16 @@ class QdrantClientCache:
             self._clients.move_to_end(key)
             return client
 
-        client = AsyncQdrantClient(url=url, api_key=api_key, timeout=DEFAULT_TIMEOUT_SECONDS)
+        # AsyncQdrantClient defaults `port` to 6333 and appends it to `url`
+        # whenever the URL itself has no explicit port — verified hands-on
+        # that this silently breaks any HTTPS Qdrant on the standard port
+        # 443 (e.g. self-hosted behind a normal reverse proxy) unless the
+        # matching port is passed explicitly here.
+        parsed = urlsplit(url)
+        port = parsed.port if parsed.port is not None else (443 if parsed.scheme == "https" else 80)
+        client = AsyncQdrantClient(
+            url=url, api_key=api_key, port=port, timeout=DEFAULT_TIMEOUT_SECONDS
+        )
         self._clients[key] = client
         if len(self._clients) > self._max_size:
             _, evicted = self._clients.popitem(last=False)

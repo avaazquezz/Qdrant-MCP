@@ -14,6 +14,7 @@ from mcp_qdrant.qdrant_client_cache import QdrantClientCache
 class _FakeClient:
     def __init__(self, **kwargs: object) -> None:
         self.closed = False
+        self.kwargs = kwargs
 
     async def close(self) -> None:
         self.closed = True
@@ -44,6 +45,31 @@ async def test_eviction_beyond_max_size_creates_new_client() -> None:
     again = await cache.get_or_create("http://a.example.com:6333", None)
     assert again is not first
     await cache.aclose_all()
+
+
+async def test_explicit_port_in_url_is_left_untouched(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cache_module, "AsyncQdrantClient", _FakeClient)
+    cache = QdrantClientCache()
+    client = await cache.get_or_create("https://qdrant.example.com:6333", None)
+    assert client.kwargs["port"] == 6333  # type: ignore[attr-defined]
+
+
+async def test_https_url_without_port_defaults_to_443(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Regression test: AsyncQdrantClient defaults `port` to 6333 and silently
+    # appends it to any URL with no explicit port — verified hands-on this
+    # breaks a real HTTPS Qdrant on the standard port 443 unless the
+    # matching port is passed explicitly.
+    monkeypatch.setattr(cache_module, "AsyncQdrantClient", _FakeClient)
+    cache = QdrantClientCache()
+    client = await cache.get_or_create("https://qdrant.example.com", None)
+    assert client.kwargs["port"] == 443  # type: ignore[attr-defined]
+
+
+async def test_http_url_without_port_defaults_to_80(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cache_module, "AsyncQdrantClient", _FakeClient)
+    cache = QdrantClientCache()
+    client = await cache.get_or_create("http://qdrant.example.com", None)
+    assert client.kwargs["port"] == 80  # type: ignore[attr-defined]
 
 
 async def test_evicted_client_is_closed_after_grace_period(monkeypatch: pytest.MonkeyPatch) -> None:
