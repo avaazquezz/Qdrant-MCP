@@ -3,23 +3,20 @@
 from __future__ import annotations
 
 from typing import Annotated, Any
-from uuid import UUID
 
-from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
     CountResult,
     Filter,
-    FilterSelector,
-    PointIdsList,
     PointStruct,
     Record,
     UpdateResult,
 )
 
 from mcp_qdrant.tools.errors import call_qdrant
+from mcp_qdrant.tools.points_shared import build_points_selector
 from mcp_qdrant.tools.registry import ToolRegistry
 
 _UPSERT_ANNOTATIONS = ToolAnnotations(
@@ -131,15 +128,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             "must": [{"key": "city", "match": {"value": "ny"}}]
         }}
         """
-        if (ids is None) == (points_filter is None):
-            raise ToolError("Provide exactly one of `ids` or `points_filter`, not both/neither.")
-        selector: PointIdsList | FilterSelector
-        if ids is not None:
-            point_ids: list[int | str | UUID] = list(ids)
-            selector = PointIdsList(points=point_ids)
-        else:
-            assert points_filter is not None
-            selector = FilterSelector(filter=points_filter)
+        selector = build_points_selector(ids, points_filter)
         return await call_qdrant(lambda: client.delete(collection_name, points_selector=selector))
 
     async def qdrant_points_scroll(

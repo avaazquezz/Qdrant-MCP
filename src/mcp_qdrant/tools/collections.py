@@ -2,23 +2,33 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
+    BinaryQuantization,
     CollectionInfo,
     CollectionParamsDiff,
     CollectionsResponse,
+    Disabled,
     Distance,
     HnswConfigDiff,
     OptimizersConfigDiff,
+    ProductQuantization,
+    ScalarQuantization,
+    SparseVectorParams,
+    StrictModeConfig,
     VectorParams,
+    VectorParamsDiff,
 )
 
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.registry import ToolRegistry
+
+QuantizationConfigInput = ScalarQuantization | ProductQuantization | BinaryQuantization
 
 _CREATE_ANNOTATIONS = ToolAnnotations(
     title="Create Qdrant collection",
@@ -79,19 +89,46 @@ class CollectionExistsResult(BaseModel):
 def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_collection_create(
         collection_name: str,
-        vector_size: Annotated[int, Field(gt=0)],
+        vector_size: Annotated[int, Field(gt=0)] | None = None,
         distance: Literal["Cosine", "Euclid", "Dot", "Manhattan"] = "Cosine",
+        vectors: dict[str, VectorParams] | None = None,
+        sparse_vectors: dict[str, SparseVectorParams] | None = None,
+        quantization_config: QuantizationConfigInput | None = None,
+        strict_mode_config: StrictModeConfig | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> CollectionInfo:
-        """Create a collection with a single unnamed vector (size + distance).
+        """Create a collection: either a single unnamed vector (`vector_size`
+        + `distance`), or one or more named vectors (`vectors`, each a full
+        `VectorParams` — size, distance, and optionally its own
+        `multivector_config` for ColBERT-style multi-vectors or
+        `quantization_config`) — exactly one of the two. `sparse_vectors`
+        defines sparse (keyword-style) vectors at creation time.
+        `quantization_config` (scalar/product/binary) and
+        `strict_mode_config` apply to the whole collection.
 
         Fails with a clear error if a collection with this name already exists.
 
-        Example: {"collection_name": "docs", "vector_size": 4, "distance": "Cosine"}
+        Example (simple): {"collection_name": "docs", "vector_size": 4, "distance": "Cosine"}
+        Example (hybrid): {"collection_name": "docs", "vectors": {
+            "dense": {"size": 4, "distance": "Cosine"}
+        }, "sparse_vectors": {"sparse": {}}}
         """
+        if (vector_size is None) == (vectors is None):
+            raise ToolError("Provide exactly one of `vector_size` or `vectors`, not both/neither.")
+        vectors_config = (
+            VectorParams(size=vector_size, distance=Distance(distance))
+            if vector_size is not None
+            else vectors
+        )
+        assert vectors_config is not None
         await call_qdrant(
             lambda: client.create_collection(
                 collection_name,
-                vectors_config=VectorParams(size=vector_size, distance=Distance(distance)),
+                vectors_config=vectors_config,
+                sparse_vectors_config=sparse_vectors,
+                quantization_config=quantization_config,
+                strict_mode_config=strict_mode_config,
+                metadata=metadata,
             )
         )
         return await call_qdrant(lambda: client.get_collection(collection_name))
@@ -117,20 +154,37 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         optimizers_config: OptimizersConfigDiff | None = None,
         hnsw_config: HnswConfigDiff | None = None,
         collection_params: CollectionParamsDiff | None = None,
+        vectors_config: dict[str, VectorParamsDiff] | None = None,
+        quantization_config: QuantizationConfigInput | Literal["disabled"] | None = None,
+        sparse_vectors_config: dict[str, SparseVectorParams] | None = None,
+        strict_mode_config: StrictModeConfig | None = None,
     ) -> CollectionInfo:
-        """Update optimizer/HNSW/collection params on an existing collection.
+        """Update optimizer/HNSW/collection/vector params on an existing
+        collection.
 
         Only the fields you pass are changed; omitted ones keep their current
-        value. Fails with a clear error if the collection doesn't exist.
+        value. `quantization_config="disabled"` turns quantization off.
+        `vectors_config`/`sparse_vectors_config` only **adjust** named
+        vectors that already exist (HNSW/quantization/index tuning) — they
+        cannot add a new one; use `qdrant_collection_vector_create` for
+        that, or this fails with Qdrant's own "Not existing vector name"
+        error. Fails with a clear error if the collection doesn't exist.
 
         Example: {"collection_name": "docs", "optimizers_config": {"indexing_threshold": 10000}}
         """
+        resolved_quantization = (
+            Disabled.DISABLED if quantization_config == "disabled" else quantization_config
+        )
         await call_qdrant(
             lambda: client.update_collection(
                 collection_name,
                 optimizers_config=optimizers_config,
                 hnsw_config=hnsw_config,
                 collection_params=collection_params,
+                vectors_config=vectors_config,
+                quantization_config=resolved_quantization,
+                sparse_vectors_config=sparse_vectors_config,
+                strict_mode_config=strict_mode_config,
             )
         )
         return await call_qdrant(lambda: client.get_collection(collection_name))

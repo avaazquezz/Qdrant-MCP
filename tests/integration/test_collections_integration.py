@@ -76,3 +76,45 @@ async def test_collection_create_update_delete_roundtrip_real_qdrant() -> None:
     finally:
         await client.delete_collection(collection_name)
         await client.close()
+
+
+async def test_collection_create_named_vectors_sparse_and_quantization_real_qdrant() -> None:
+    url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+    client = AsyncQdrantClient(url=url, timeout=10)
+    collection_name = _unique_name()
+
+    server: MCPServer[None] = MCPServer(name="test-server")
+    registry = ToolRegistry(server, enabled_toolsets=("core",), read_only=False)
+    collections_tools.register(registry, client)
+
+    try:
+        create_result = await server.call_tool(
+            "qdrant_collection_create",
+            {
+                "collection_name": collection_name,
+                "vectors": {"dense": {"size": 4, "distance": "Cosine"}},
+                "sparse_vectors": {"sparse": {}},
+                "quantization_config": {"scalar": {"type": "int8"}},
+                "strict_mode_config": {"enabled": True, "max_query_limit": 100},
+            },
+        )
+        assert isinstance(create_result, CallToolResult)
+        assert create_result.is_error is False
+        info = CollectionInfo.model_validate(create_result.structured_content)
+        assert "dense" in (info.config.params.vectors or {})
+        assert "sparse" in (info.config.params.sparse_vectors or {})
+        assert info.config.strict_mode_config is not None
+        assert info.config.strict_mode_config.enabled is True
+
+        # update_collection can only tweak quantization on a vector that
+        # already exists, or toggle the collection-wide setting off again —
+        # verified hands-on it cannot add a new named vector.
+        update_result = await server.call_tool(
+            "qdrant_collection_update",
+            {"collection_name": collection_name, "quantization_config": "disabled"},
+        )
+        assert isinstance(update_result, CallToolResult)
+        assert update_result.is_error is False
+    finally:
+        await client.delete_collection(collection_name)
+        await client.close()

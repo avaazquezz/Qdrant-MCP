@@ -126,23 +126,39 @@ crudo, contra la decisión de arquitectura de la Fase 0. `qdrant_recommend`/`_ba
 `_groups` y `qdrant_discover`/`_batch` no se ven afectadas: son query types reales
 (`RecommendQuery`/`DiscoverQuery`) construidos sobre `query_points`.
 
-### Fase 3 — `feat/payload-indexing-vectors` → v0.3.0
-Payload, indexing y vectores nombrados — incluye extender los schemas de
-`qdrant_collection_create`/`_update` (Fase 1) con las opciones avanzadas de
-configuración de colección que la Fase 1 dejó fuera a propósito:
+### Fase 3 — `feat/payload-indexing-vectors` → v0.3.0 ✅ Cerrada
+Payload, indexing y vectores nombrados — extiende los schemas de
+`qdrant_collection_create`/`_update` (Fase 1, toolset `core` sin cambios) con las
+opciones avanzadas de configuración de colección que la Fase 1 dejó fuera a propósito:
 
 - `quantization_config` (scalar/product/binary)
 - `sparse_vectors` (hybrid search de texto)
-- multivectores (`comparator: max_sim`, estilo ColBERT)
+- multivectores (`comparator: max_sim`, estilo ColBERT) — vive dentro de la config de
+  cada vector nombrado en `vectors`, no es un parámetro aparte
 - `strict_mode_config` y metadata de colección (key-value)
 
-Y el resto de tools de payload/indexing:
+Y el resto de tools de payload/indexing/vectores (toolset nuevo `payload`):
 
 - `qdrant_payload_set`, `_overwrite`, `_delete`, `_clear`, `_facet`
 - `qdrant_payload_index_create`, `_delete`
 - `qdrant_points_batch_update` (operación atómica múltiple)
 - `qdrant_vectors_update`, `_delete` (named vectors sobre points existentes)
 - `qdrant_collection_vector_create`, `_delete` (named vectors a nivel colección)
+
+**Hallazgo verificado durante la Fase 3** (probado en vivo contra Qdrant real, no
+asumido de la documentación): existen **dos mecanismos distintos** para vectores
+nombrados, no uno. `qdrant_collection_update` (`quantization_config`/
+`sparse_vectors_config`) solo **ajusta** un vector nombrado que ya existe — pedirle que
+añada uno nuevo falla con el propio error de Qdrant "Not existing vector name". El
+único mecanismo real para **añadir o quitar** un vector nombrado (denso o disperso) en
+una colección que ya tiene puntos es `create_vector_name`/`delete_vector_name`
+(`qdrant_collection_vector_create`/`_delete`) — y ese endpoint **no existe** en Qdrant
+`v1.13.6` ni `v1.15.1` (404 verificado con ambos), solo a partir de una versión más
+reciente (funciona en `v1.19.0`). Consecuencia: el **mínimo de Qdrant server soportado
+por este proyecto sube a `v1.19.0`** desde esta fase — CI pinea esa versión, y el
+resto de tests de integración de Fases 1-2 se re-verificaron sin cambios contra ella
+(de paso, desaparece el aviso de incompatibilidad de versión cliente/servidor
+documentado desde la Fase 0).
 
 ### Fase 4 — `feat/snapshots` → v0.4.0
 Backup/restore, a nivel colección y storage completo.
