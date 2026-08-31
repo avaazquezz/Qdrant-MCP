@@ -68,7 +68,8 @@ Environment variables: `QDRANT_URL`, `QDRANT_API_KEY`, `QDRANT_LOCAL_PATH` (exac
 of `QDRANT_URL`/`QDRANT_LOCAL_PATH`), `QDRANT_MCP_READ_ONLY`, `QDRANT_MCP_TRANSPORT`
 (`stdio` default, or `streamable-http`), `QDRANT_MCP_TOOLSETS` (comma-separated;
 default `core` only — opt in to `search`, `payload`, `snapshots`, `observability`
-explicitly).
+explicitly), `QDRANT_MCP_BYO` (see below — mutually exclusive with
+`QDRANT_URL`/`QDRANT_LOCAL_PATH`).
 
 ### Claude Desktop / Claude Code (local, `stdio`)
 
@@ -110,3 +111,32 @@ In Claude.ai (**Customize → Connectors → Add custom connector**, verified ha
 against a real account): enter the server's HTTPS URL, then on the detected
 authentication screen choose **"None"** and add a **Request header** —
 `Authorization` → `Bearer <the same secret>`.
+
+### Public "bring your own Qdrant" instance (`QDRANT_MCP_BYO`)
+
+A `streamable-http` deployment can run with **no backing Qdrant of its own** — every
+caller supplies their *own* Qdrant instance (their own Qdrant Cloud account, their
+company's self-hosted Qdrant, whatever) per request, instead of using one the operator
+hosts and pays for. Isolation between callers is automatic — each one talks to their own
+database — so there's no shared secret, no per-user account, and no data at rest on this
+server.
+
+```bash
+QDRANT_MCP_BYO=1 \
+QDRANT_MCP_TRANSPORT=streamable-http \
+QDRANT_MCP_HTTP_HOST=0.0.0.0 \
+mcp-qdrant
+```
+
+Two request headers, reused for a different purpose than their name suggests — verified
+hands-on that Claude.ai's custom-connector "Request headers" UI rejects made-up header
+names outright unless Anthropic has approved them, so this reuses two pre-approved ones
+instead of inventing `X-Qdrant-Url`/`X-Qdrant-Api-Key`:
+
+- `Authorization` (**required**) — your Qdrant URL, e.g. `https://xyz.cloud.qdrant.io:6333`.
+  Sent verbatim, no `Bearer` prefix needed.
+- `x-api-key` (optional) — your Qdrant API key, if your instance needs one.
+
+In Claude.ai: **Add custom connector** → authentication **"None"** → add both as
+**Request headers**. Your Qdrant must be reachable from the public internet — an SSRF
+guard rejects any URL that resolves to a private/internal/loopback address.

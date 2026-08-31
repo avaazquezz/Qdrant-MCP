@@ -37,7 +37,7 @@ funcionalidad más relevante (resharding real) es exclusiva de Qdrant Cloud.
 | Testing | `pytest` (unit con client mockeado + integración contra Qdrant real vía Docker, versión mínima soportada fijada en CI), `ruff`, `mypy`, `pre-commit` |
 | CI | GitHub Actions: lint + typecheck + tests en cada PR |
 | Doc de tools | Generada automáticamente desde los schemas Pydantic (script + check en CI) a partir de la Fase 7 — no se mantiene a mano |
-| Landing page | Fase 8, tras v1.0.0. Vive en `/website`, fuera del paquete Python que se publica en PyPI/Docker. Desplegada en infra propia (Hetzner + Traefik). Dominio: pendiente de decidir al abordar la fase |
+| Landing page | Fase 9, tras v1.0.0. Vive en `/website`, fuera del paquete Python que se publica en PyPI/Docker. Desplegada en infra propia (Hetzner + Traefik). Dominio: pendiente de decidir al abordar la fase |
 
 ## Flujo de Git
 
@@ -260,18 +260,63 @@ desde aquí):
 - [x] Empujar el tag `v1.0.0` — verificado en vivo: `mcp-qdrant==1.0.0` publicado en
       PyPI, `ghcr.io/avaazquezz/qdrant-mcp:1.0.0` publicado y descargable, Release
       `v1.0.0` creada con `mcp-qdrant.mcpb` adjunto.
-- [ ] **Corrección sobre el roadmap original**: `modelcontextprotocol/servers` ya no
+- [x] **Corrección sobre el roadmap original**: `modelcontextprotocol/servers` ya no
       acepta servers de comunidad por PR — su propio README redirige al
-      [MCP Registry](https://registry.modelcontextprotocol.io) oficial. Publicar ahí
-      requiere el CLI `mcp-publisher` (`login github` con device-code interactivo +
-      `server.json` + `publish`), y para un paquete PyPI el marcador de propiedad va
-      en el propio README publicado (`mcp-name: io.github.avaazquezz/qdrant-mcp`) —
-      como el `v1.0.0` ya está en PyPI sin ese marcador, hace falta una release nueva
-      (p.ej. `v1.0.1`) que lo incluya antes de poder publicar en el registry.
-- [ ] Dar de alta el servidor en Smithery (`smithery mcp publish` o panel web,
-      requiere cuenta propia).
+      [MCP Registry](https://registry.modelcontextprotocol.io) oficial. Publicado ahí
+      en la práctica: release `v1.0.1` con el marcador `mcp-name:
+      io.github.avaazquezz/mcp-qdrant` en el README (necesario porque `v1.0.0` ya
+      estaba en PyPI sin él), login con `mcp-publisher login github` (device-code) y
+      `mcp-publisher publish` — verificado que aparece buscando
+      `io.github.avaazquezz/mcp-qdrant` en `registry.modelcontextprotocol.io`.
+- [ ] **Bloqueado, no por nosotros**: Smithery. Cuenta creada (namespace
+      `adrianvazvaz-2117`) y CLI autenticado, pero `smithery mcp publish
+      <bundle>.mcpb` falla con `"Could not determine bundle runtime from manifest"`
+      — verificado leyendo el propio código del CLI (`smithery` npm, v1.2.0): solo
+      reconoce `server.type` `"python"`/`"node"`/`"binary"`, no el tipo `"uv"` (MCPB
+      spec v0.4+) que usa nuestro bundle real. Retomar cuando Smithery actualice su
+      CLI, o si se decide construir un `.mcpb` alternativo vendorizado solo para esto
+      (no se ha hecho: reintroduciría la fragilidad multi-plataforma que el tipo
+      `"uv"` evita a propósito).
 
-### Fase 8 — `feat/landing-page` (post v1.0.0, sin bump de semver del paquete)
+### Fase 8 — `feat/byo-public-instance` → v1.1.0 ✅ Cerrada
+Segundo modo de despliegue, sin tools nuevas: un `streamable-http` público donde el
+operador no aloja ningún dato. Motivación: abrir el servidor a que lo use cualquiera
+("como un MCP cualquiera") sin asumir el almacenamiento de terceros ni construir un
+sistema de altas/claves por usuario.
+
+**Decisión** (descartando la alternativa de una base de datos compartida con
+namespacing por usuario): cada llamada trae su propio Qdrant (Qdrant Cloud propio, o el
+de su empresa) vía cabeceras — sin base de datos de reserva. El aislamiento entre
+usuarios es automático (cada uno habla con una BBDD distinta), así que no hace falta
+namespacing de colecciones, ni registro de usuarios, ni claves emitidas por nosotros.
+
+**Verificado en el código, no asumido**: el `AsyncQdrantClient` de cada tool se resuelve
+por atributo en tiempo de llamada (dentro de los `lambda` de `call_qdrant`), no en el
+registro — permite sustituirlo por un proxy (`BYOQdrantClientProxy`, en
+`byo_qdrant.py`) que resuelve el cliente real por petición vía `contextvars`, sin tocar
+ninguno de los 8 ficheros de tools. El SDK (`mcp==2.1.1`) propaga explícitamente esos
+`contextvars` a través de sus `anyio` task boundaries — mecanismo real, no supuesto.
+
+**Hallazgo crítico verificado en vivo contra Claude.ai**: un nombre de cabecera
+personalizado (`X-Qdrant-Url`) no se puede usar — el propio panel de "Añadir conector
+personalizado" avisa de que los nombres de cabecera a medida necesitan aprobación
+manual de Anthropic, y un nombre no aprobado da error al añadir el conector. Por eso el
+diseño reutiliza dos cabeceras ya preaprobadas con un significado distinto al de su
+nombre: `Authorization` lleva la URL del Qdrant del usuario (valor literal, sin
+`Bearer` forzado), `x-api-key` (opcional) lleva su API key.
+
+**SSRF, no opcional**: el servidor conecta a una URL que aporta un desconocido, desde
+un host que también aloja otros proyectos en redes Docker internas — `ssrf_guard.py`
+rechaza cualquier URL que resuelva a una dirección privada/loopback/link-local
+(`ipaddress.is_private` cubre RFC1918, loopback, link-local incl. el IP de metadatos
+de nube, y las variantes IPv6), re-resolviendo en cada petición para no dejar hueco a
+DNS rebinding.
+
+Desplegado como segundo servicio, `mcp-qdrant-public.vazquezlabs.com`, sin Qdrant propio
+(`QDRANT_MCP_BYO=1`, sin `QDRANT_URL`, sin `QDRANT_MCP_SHARED_SECRET`) — la instancia
+personal (`mcp-qdrant.vazquezlabs.com`) no cambia.
+
+### Fase 9 — `feat/landing-page` (post v1.0.0, sin bump de semver del paquete)
 Landing de marketing del producto. Vive en `/website`, build independiente del paquete
 Python, desplegada en infra propia (Hetzner + Traefik) siguiendo el mismo patrón que el
 resto de proyectos. Se construye al final, con el producto ya cerrado, para no rehacer
@@ -305,7 +350,8 @@ final incluye alguna métrica de adopción (stars, downloads) o se lanza sin ell
 | — | 5 — descartada (cluster/admin, requiere Qdrant distribuido; resharding real es Cloud-only) |
 | v0.6.0 | 6 — observabilidad |
 | v1.0.0 | 7 — endurecido, documentado, publicable |
-| — | 8 — landing page, sin versión de paquete, deploy propio |
+| v1.1.0 | 8 — instancia pública "bring your own Qdrant" |
+| — | 9 — landing page, sin versión de paquete, deploy propio |
 
 ---
 *Catálogo de endpoints verificado contra `api.qdrant.tech/master/llms.txt` y el README de
