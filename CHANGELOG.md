@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-31
+
+Fase 5 (`aliases-cluster-admin`) was discarded before implementation — see `ROADMAP.md`
+— so this release follows `0.4.0` directly, no `0.5.0`.
+
+### Added
+- New `observability` toolset (opt-in via `QDRANT_MCP_TOOLSETS=core,observability`): `qdrant_telemetry`, `qdrant_metrics_prometheus`, `qdrant_quotas_get`, `_set`, `qdrant_issues_list`, `_clear`.
+
+### Removed from the original roadmap catalog
+- `qdrant_write_protection_get`/`_set` are not implemented: verified hands-on that neither `qdrant-client==1.19.0`'s high-level client nor any of its 10 low-level REST API classes have anything related to locks/write-protection/read-only at the server level — no substitute concept exists (unlike Fase 2's `search`, fully consolidated into `query_points`).
+
+### Design notes
+- `qdrant_metrics_prometheus` returns the scrape URL, not the metrics content: verified hands-on that the underlying `client.http.service_api.metrics()` always calls `response.json()` regardless of type, and crashes against the real Prometheus plaintext exposition format it returns. A scraper needs to `GET` that URL itself anyway — same reasoning as Fase 4's snapshot download tools.
+- This is the first toolset whose primary mechanism is the low-level REST layer (`client.http.<api>_api.<method>`) instead of `AsyncQdrantClient`'s high-level convenience methods — none of telemetry/quotas/issues is wrapped there (the one high-level exception, `client.cluster_telemetry()`, is distributed-cluster telemetry, out of scope since Fase 5 was discarded). `call_qdrant` works unchanged against these calls; they just return the full response envelope (`result`/`status`/`time`), unwrapped by hand.
+
 ## [0.4.0] - 2026-08-31
 
 ### Added

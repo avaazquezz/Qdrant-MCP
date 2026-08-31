@@ -1,8 +1,10 @@
 # Roadmap — Qdrant MCP
 
 Servidor MCP que expone **toda la superficie útil de la API de Qdrant** (colecciones,
-points, búsqueda, indexing, snapshots, cluster, observabilidad), no solo `store`/`find`
-como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
+points, búsqueda, indexing, snapshots, observabilidad), no solo `store`/`find`
+como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools). No cubre administración
+de cluster (Fase 5, descartada — ver más abajo): requiere Qdrant distribuido y su
+funcionalidad más relevante (resharding real) es exclusiva de Qdrant Cloud.
 
 ## Principios (no negociables)
 
@@ -183,39 +185,39 @@ matiz relevante si Qdrant corre detrás de un remapeo de puertos Docker o un pro
 existe `qdrant_storage_snapshot_recover`: restaurar el storage completo se hace con el
 servidor parado, no es una llamada en caliente.
 
-### Fase 5 — `feat/aliases-cluster-admin` → v0.5.0 (marcar como avanzado/opcional)
-Requiere Qdrant en modo distribuido para tener sentido pleno; documentar claramente que
-algunas tools solo aplican con cluster real.
+### Fase 5 — `feat/aliases-cluster-admin` ❌ Descartada
+Se descarta: la mayoría de sus tools (aliases, estado de cluster, rebalanceo de
+shards, snapshots por shard) solo tienen sentido con un Qdrant en modo distribuido
+real, y el resharding —lo que justificaba el nombre "cluster-admin"— es exclusivo de
+Qdrant Cloud (verificado en la Fase 0: el endpoint existe en self-hosted pero no
+reequilibra nada de verdad). No aporta valor para el caso de uso real de este
+proyecto (despliegue de un solo nodo). Los números de fase/versión posteriores
+(Fase 6 / v0.6.0 en adelante) no se renumeran.
 
-- `qdrant_alias_update` (create/rename/delete), `_list`, `_list_all`
-- `qdrant_cluster_status`, `_info`, `_recover`, `_peer_remove`
-- `qdrant_collection_cluster_update` (rebalanceo real: `move_shard`, `replicate_shard`,
-  `abort_transfer`, `drop_replica`, `create_sharding_key`, `delete_sharding_key`,
-  `start_resharding`, `abort_resharding`, `restart_transfer`) — sin esto la fase no
-  cumple lo que promete su propio nombre (cluster-admin)
-- `qdrant_shard_key_create`, `_delete`, `_list`
-- `qdrant_shard_snapshot_create`, `_list`, `_download`, `_delete`, `_recover`
-
-**DoD específico de esta fase** (sustituye el punto 2 genérico): los tests de
-integración corren contra un **cluster Qdrant multi-nodo levantado con
-`docker-compose`**, no contra el nodo único de CI de las fases anteriores — documentar
-en `docs/` cómo levantarlo en local.
-
-**Hallazgo verificado durante Fase 0** (release notes reales de `qdrant/qdrant`, no
-memoria): el resharding real de `qdrant_collection_cluster_update` (`start_resharding`
-y compañía) es **exclusivo de Qdrant Cloud** — en self-hosted/open-source (la imagen
-`qdrant/qdrant` que usa este repo en CI) el endpoint existe pero no reequilibra nada de
-verdad. Consecuencia para el DoD: `qdrant_collection_cluster_update` solo puede
-testearse con mocks (construcción del payload), nunca con una aserción de integración
-real de que el resharding ocurrió, ni siquiera contra el cluster multi-nodo de arriba.
-
-### Fase 6 — `feat/service-observability` → v0.6.0
+### Fase 6 — `feat/service-observability` → v0.6.0 ✅ Cerrada
 
 - `qdrant_telemetry`, `qdrant_metrics_prometheus`
-- `qdrant_write_protection_get`, `_set`
 - `qdrant_quotas_get`, `_set`
 - `qdrant_issues_list`, `_clear` (API Beta de Qdrant — documentar en la tool que puede
   cambiar sin previo aviso)
+
+**Hallazgos verificados durante la Fase 6** (probado en vivo, no asumido):
+- `qdrant_write_protection_get`/`_set` **se eliminan del catálogo**: ni el cliente de
+  alto nivel ni ninguna de sus 10 clases de API REST de bajo nivel tienen nada
+  relacionado con locks/write-protection/read-only a nivel servidor en
+  `qdrant-client==1.19.0` — a diferencia de la Fase 2 (`search` seguía viva,
+  consolidada en `query_points`), aquí no hay ningún concepto sustituto.
+- `qdrant_metrics_prometheus` no puede traer el contenido: `client.http.service_api.metrics()`
+  intenta `response.json()` sin mirar el tipo real, y revienta contra el texto plano
+  formato Prometheus que devuelve de verdad. La tool devuelve la URL de scraping
+  (`{QDRANT_URL}/metrics`) en vez de las métricas — mismo patrón que la descarga de
+  snapshots de la Fase 4.
+- Esta es la primera fase cuyo mecanismo principal pasa por la capa REST de bajo nivel
+  (`client.http.<api>_api.<método>`) en vez del cliente de alto nivel: nada de
+  telemetry/quotas/issues está envuelto ahí (la única excepción,
+  `client.cluster_telemetry()`, es telemetría de cluster distribuido — fuera de
+  alcance, coherente con haber descartado la Fase 5). `call_qdrant` sigue funcionando
+  igual sin cambios; solo hay que desenvolver `.result` del sobre de respuesta a mano.
 
 ### Fase 7 — `feat/packaging-and-dx` → v1.0.0
 Hardening y distribución, no tools nuevas. (El guardarraíl `QDRANT_MCP_READ_ONLY` y
@@ -262,7 +264,7 @@ final incluye alguna métrica de adopción (stars, downloads) o se lanza sin ell
 | v0.2.0 | 2 — búsqueda avanzada |
 | v0.3.0 | 3 — payload/indexing/vectores |
 | v0.4.0 | 4 — snapshots |
-| v0.5.0 | 5 — cluster/admin (opcional según despliegue) |
+| — | 5 — descartada (cluster/admin, requiere Qdrant distribuido; resharding real es Cloud-only) |
 | v0.6.0 | 6 — observabilidad |
 | v1.0.0 | 7 — endurecido, documentado, publicable |
 | — | 8 — landing page, sin versión de paquete, deploy propio |

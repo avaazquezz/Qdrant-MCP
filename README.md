@@ -49,3 +49,9 @@ MCP server that wraps the Qdrant vector database API as tools. See [ROADMAP.md](
 | `qdrant_storage_snapshot_list` | `snapshots` | ✅ | ❌ | ✅ | Lists the full-storage snapshots on the server. |
 | `qdrant_storage_snapshot_delete` | `snapshots` | ❌ | ✅ | ✅ | Deletes a full-storage snapshot. |
 | `qdrant_storage_snapshot_download` | `snapshots` | ✅ | ❌ | ✅ | Returns a full-storage snapshot's download URL. No live `_recover` exists — restoring the whole storage requires a server restart pointed at the file. |
+| `qdrant_telemetry` | `observability` | ✅ | ❌ | ✅ | Server-wide telemetry: build info, per-collection stats, requests, memory/hardware usage. |
+| `qdrant_metrics_prometheus` | `observability` | ✅ | ❌ | ✅ | Returns the Prometheus metrics scrape URL (does not fetch the metrics content itself). |
+| `qdrant_quotas_get` | `observability` | ✅ | ❌ | ✅ | Current server-wide resource quotas and usage. |
+| `qdrant_quotas_set` | `observability` | ❌ | ❌ | ✅ | Updates server-wide resource quotas (memory/disk limits). |
+| `qdrant_issues_list` | `observability` | ✅ | ❌ | ✅ | Lists issues Qdrant detected about its own configuration. API Beta in Qdrant — shape may change. |
+| `qdrant_issues_clear` | `observability` | ❌ | ✅ | ✅ | Clears all accumulated issues. |
