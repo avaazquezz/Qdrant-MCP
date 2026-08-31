@@ -312,9 +312,15 @@ rechaza cualquier URL que resuelva a una dirección privada/loopback/link-local
 de nube, y las variantes IPv6), re-resolviendo en cada petición para no dejar hueco a
 DNS rebinding.
 
-Desplegado como segundo servicio, `mcp-qdrant-public.vazquezlabs.com`, sin Qdrant propio
-(`QDRANT_MCP_BYO=1`, sin `QDRANT_URL`, sin `QDRANT_MCP_SHARED_SECRET`) — la instancia
-personal (`mcp-qdrant.vazquezlabs.com`) no cambia.
+Desplegado inicialmente como segundo servicio en paralelo al personal
+(`mcp-qdrant-public.vazquezlabs.com`). Decisión posterior del propietario: el proyecto
+pasa a ser **únicamente** la instancia BYO — se desmontó la instancia personal
+(contenedor, Qdrant propia y su volumen de datos, sin colecciones que perder) y el
+servicio BYO se movió al dominio principal, ahora liberado: `mcp-qdrant.vazquezlabs.com`,
+sin Qdrant propio (`QDRANT_MCP_BYO=1`, sin `QDRANT_URL`, sin `QDRANT_MCP_SHARED_SECRET`).
+El código de la instancia personal (secreto compartido + Qdrant fijo) permanece en el
+repo sin cambios — sigue siendo un modo válido para quien se autoaloje el proyecto con
+su propia base de datos; simplemente ya no es el que corre en este servidor.
 
 ### Fase 9 — `feat/landing-page` (post v1.0.0, sin bump de semver del paquete)
 Landing de marketing del producto. Vive en `/website`, build independiente del paquete
