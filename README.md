@@ -1,5 +1,7 @@
 # Qdrant-MCP
 
+<!-- mcp-name: io.github.avaazquezz/mcp-qdrant -->
+
 MCP server that wraps the Qdrant vector database API as tools. See [ROADMAP.md](ROADMAP.md).
 
 ## Tools

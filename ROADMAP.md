@@ -255,12 +255,21 @@ tipo de servidor.
 
 **Checklist de lanzamiento v1.0.0** (visibilidad — acciones externas, no automatizables
 desde aquí):
-- [ ] Dar de alta "Trusted Publishing" para `mcp-qdrant` en pypi.org (Settings →
-      Publishing), apuntando a este repo/workflow.
-- [ ] Crear el GitHub Environment `pypi` en la configuración del repo.
-- [ ] Empujar el primer tag `v1.0.0` (dispara `publish.yml`/`docker.yml`/`mcpb.yml`).
-- [ ] Enviar PR a `modelcontextprotocol/servers` añadiendo este servidor al listado.
-- [ ] Dar de alta el servidor en Smithery.
+- [x] Dar de alta "Trusted Publishing" para `mcp-qdrant` en pypi.org.
+- [x] Crear el GitHub Environment `pypi` en la configuración del repo.
+- [x] Empujar el tag `v1.0.0` — verificado en vivo: `mcp-qdrant==1.0.0` publicado en
+      PyPI, `ghcr.io/avaazquezz/qdrant-mcp:1.0.0` publicado y descargable, Release
+      `v1.0.0` creada con `mcp-qdrant.mcpb` adjunto.
+- [ ] **Corrección sobre el roadmap original**: `modelcontextprotocol/servers` ya no
+      acepta servers de comunidad por PR — su propio README redirige al
+      [MCP Registry](https://registry.modelcontextprotocol.io) oficial. Publicar ahí
+      requiere el CLI `mcp-publisher` (`login github` con device-code interactivo +
+      `server.json` + `publish`), y para un paquete PyPI el marcador de propiedad va
+      en el propio README publicado (`mcp-name: io.github.avaazquezz/qdrant-mcp`) —
+      como el `v1.0.0` ya está en PyPI sin ese marcador, hace falta una release nueva
+      (p.ej. `v1.0.1`) que lo incluya antes de poder publicar en el registry.
+- [ ] Dar de alta el servidor en Smithery (`smithery mcp publish` o panel web,
+      requiere cuenta propia).
 
 ### Fase 8 — `feat/landing-page` (post v1.0.0, sin bump de semver del paquete)
 Landing de marketing del producto. Vive en `/website`, build independiente del paquete
