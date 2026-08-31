@@ -170,10 +170,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_points_batch_update(
         collection_name: str, operations: Annotated[list[BatchOperation], Field(min_length=1)]
     ) -> list[UpdateResult]:
-        """Run multiple point operations (upsert, delete, set/overwrite/
-        delete/clear payload, update/delete vectors) atomically against one
-        collection, in the order given. Each item is one of Qdrant's own
-        tagged operation shapes, keyed by operation name.
+        """Run multiple point operations (upsert, delete,
+        set/overwrite/delete/clear payload, update/delete vectors)
+        atomically against one collection, in the order given. Each item is
+        one of Qdrant's own tagged operation shapes, keyed by operation name.
 
         Example: {"collection_name": "docs", "operations": [
             {"upsert": {"points": [{"id": 1, "vector": [0.1, 0.2, 0.3, 0.4]}]}},
@@ -211,8 +211,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         points_filter: Filter | None = None,
     ) -> UpdateResult:
         """Remove specific named vectors from selected points, keeping
-        their payload and other vectors — exactly one of `ids`/
-        `points_filter`.
+        their payload and other vectors — exactly one of
+        `ids`/`points_filter`.
 
         Example: {"collection_name": "docs", "vector_names": ["sparse"], "ids": [1]}
         """

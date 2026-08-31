@@ -1,0 +1,22 @@
+name: Package MCPB
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to upload the release asset
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g @anthropic-ai/mcpb
+      - run: mcpb validate manifest.json
+      - run: mcpb pack . mcp-qdrant.mcpb
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: mcp-qdrant.mcpb

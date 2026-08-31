@@ -726,13 +726,14 @@ wheels = [
 
 [[package]]
 name = "mcp-qdrant"
-version = "0.6.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },
     { name = "pydantic" },
     { name = "qdrant-client" },
     { name = "tenacity" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -751,6 +752,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.0,<3" },
     { name = "qdrant-client", specifier = "==1.19.0" },
     { name = "tenacity", specifier = ">=9.1.4,<10" },
+    { name = "uvicorn", specifier = ">=0.52.4,<1" },
 ]
 
 [package.metadata.requires-dev]

@@ -43,3 +43,25 @@ def test_url_and_local_path_are_mutually_exclusive() -> None:
         Settings.from_env(
             {"QDRANT_URL": "http://localhost:6333", "QDRANT_LOCAL_PATH": "/tmp/qdrant"}
         )
+
+
+def test_streamable_http_without_shared_secret_raises() -> None:
+    with pytest.raises(ValueError, match="QDRANT_MCP_SHARED_SECRET"):
+        Settings.from_env({"QDRANT_MCP_TRANSPORT": "streamable-http"})
+
+
+def test_streamable_http_with_shared_secret_is_valid() -> None:
+    settings = Settings.from_env(
+        {"QDRANT_MCP_TRANSPORT": "streamable-http", "QDRANT_MCP_SHARED_SECRET": "s3cr3t"}
+    )
+    assert settings.shared_secret == "s3cr3t"
+
+
+def test_http_host_and_port_defaults_and_override() -> None:
+    assert Settings.from_env({}).http_host == "127.0.0.1"
+    assert Settings.from_env({}).http_port == 8000
+    settings = Settings.from_env(
+        {"QDRANT_MCP_HTTP_HOST": "0.0.0.0", "QDRANT_MCP_HTTP_PORT": "9000"}
+    )
+    assert settings.http_host == "0.0.0.0"
+    assert settings.http_port == 9000

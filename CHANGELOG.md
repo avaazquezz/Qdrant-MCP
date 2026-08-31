@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-08-31
+
+Fase 7 — hardening and distribution. No new tools (catalog is final at 49). This is
+the last phase before a stable v1.0.0.
+
+### Added
+- Shared-secret authentication for the `streamable-http` transport: `QDRANT_MCP_SHARED_SECRET` (required whenever `QDRANT_MCP_TRANSPORT=streamable-http` — startup fails loudly otherwise), a `SharedSecretMiddleware` checking `Authorization: Bearer <secret>`, and `QDRANT_MCP_HTTP_HOST`/`QDRANT_MCP_HTTP_PORT` to bind for a real deployment. Not in the original roadmap — added after verifying hands-on, against a real Claude.ai account and a real public tunnel, that this server had no authentication at all in `streamable-http` mode, and that `Authorization: Bearer` is one of the two header names Claude.ai's remote-connector UI accepts without needing Anthropic's manual approval.
+- `Dockerfile` (multi-stage, `uv`-based) + `.github/workflows/docker.yml`, pushing to `ghcr.io/avaazquezz/qdrant-mcp` on version tags.
+- `.github/workflows/publish.yml`: builds and publishes to PyPI via `uv publish --trusted-publishing`, triggered by version tags. Requires a one-time "Trusted Publishing" registration on pypi.org (external, not automatable from here).
+- `manifest.json` (repo root) + `.mcpbignore` + `.github/workflows/mcpb.yml`: a Claude Desktop `.mcpb` bundle using the MCPB spec's `"uv"` server type (manifest v0.4+) — `uv` resolves `pyproject.toml`'s dependencies on the user's machine, no vendoring, no local Python required beforehand. Validated with the official `mcpb` CLI (`validate`/`pack`); packed bundle is ~136 KB.
+- `scripts/gen_tools_doc.py`: regenerates the README tools table from the live tool registry (`list_tools()`, the same view a real MCP client sees) between `<!-- TOOLS_TABLE_START/END -->` markers. `--check` mode wired into CI's `lint` job.
+- README "Configuration" section with copy-pasteable `claude_desktop_config.json`/`.mcp.json` snippets and the verified Claude.ai remote-connector setup steps.
+- Launch checklist for v1.0.0 in `ROADMAP.md` (PyPI trusted publishing setup, first tag, `modelcontextprotocol/servers` + Smithery submissions) — external actions, tracked but not executed automatically.
+
+### Changed
+- README tool descriptions switched from third-person prose to the tools' own imperative-mood docstring summaries, since the table is now generated verbatim from `list_tools()` rather than hand-edited — a few docstrings were reworded slightly (line-wrap points only, no behavior change) to avoid awkward auto-extracted summaries.
+- `uvicorn` added as an explicit direct dependency (was already pulled in transitively by `mcp`, but `cli.py` now imports it directly to serve `streamable-http` with the auth middleware).
+
 ## [0.6.0] - 2026-08-31
 
 Fase 5 (`aliases-cluster-admin`) was discarded before implementation — see `ROADMAP.md`
