@@ -18,4 +18,8 @@ async def test_build_server_registers_default_toolset() -> None:
 async def test_build_server_respects_disabled_toolsets() -> None:
     server = build_server(Settings.from_env({"QDRANT_MCP_TOOLSETS": "search"}))
     tools = await server.list_tools()
-    assert tools == []
+    names = {t.name for t in tools}
+    assert "qdrant_health_check" not in names
+    assert "qdrant_query" not in names
+    assert "qdrant_query_batch" in names
+    assert len(tools) == 9

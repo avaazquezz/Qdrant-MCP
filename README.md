@@ -18,4 +18,13 @@ MCP server that wraps the Qdrant vector database API as tools. See [ROADMAP.md](
 | `qdrant_points_delete` | `core` | ❌ | ✅ | ✅ | Deletes points by id list or by payload filter (exactly one of the two). |
 | `qdrant_points_scroll` | `core` | ✅ | ❌ | ✅ | Pages through all points in a collection, optionally filtered. |
 | `qdrant_points_count` | `core` | ✅ | ❌ | ✅ | Counts points in a collection, optionally matching a filter. |
-| `qdrant_query` | `core` | ✅ | ❌ | ✅ | Vector similarity search with an optional payload filter and limit. |
+| `qdrant_query` | `core` | ✅ | ❌ | ✅ | Vector similarity search, with optional hybrid search (`fusion`+`prefetch`), `using`, and `lookup_from`. |
+| `qdrant_query_batch` | `search` | ✅ | ❌ | ✅ | Runs multiple independent queries against one collection in a single round trip. |
+| `qdrant_query_groups` | `search` | ✅ | ❌ | ✅ | Vector query grouped by a payload field, up to N hits per group. |
+| `qdrant_recommend` | `search` | ✅ | ❌ | ✅ | Finds points similar to positive examples and dissimilar to negative ones. |
+| `qdrant_recommend_batch` | `search` | ✅ | ❌ | ✅ | Runs multiple independent recommend queries in a single round trip. |
+| `qdrant_recommend_groups` | `search` | ✅ | ❌ | ✅ | Recommend query grouped by a payload field. |
+| `qdrant_discover` | `search` | ✅ | ❌ | ✅ | Ranks points by fit to a target within positive/negative context pairs. |
+| `qdrant_discover_batch` | `search` | ✅ | ❌ | ✅ | Runs multiple independent discover queries in a single round trip. |
+| `qdrant_distance_matrix_pairs` | `search` | ✅ | ❌ | ✅ | Pairwise distance matrix between a random sample of points. |
+| `qdrant_distance_matrix_offsets` | `search` | ✅ | ❌ | ✅ | Same distance matrix, in a compact offset-encoded shape. |

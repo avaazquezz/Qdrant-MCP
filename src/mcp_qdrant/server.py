@@ -14,14 +14,16 @@ from mcp_qdrant.tools import collections as collections_tools
 from mcp_qdrant.tools import core as core_tools
 from mcp_qdrant.tools import points as points_tools
 from mcp_qdrant.tools import query as query_tools
+from mcp_qdrant.tools import search as search_tools
 from mcp_qdrant.tools.registry import ToolRegistry
 
 SERVER_NAME = "mcp-qdrant"
 
-# One entry per tool module; collections/points/query all register under the
-# "core" toolset (Fase 1), search/payload/snapshots/admin/observability land
-# in Fases 2-6, each adding one module + one line here.
-_TOOL_MODULES = (core_tools, collections_tools, points_tools, query_tools)
+# One entry per tool module; collections/points/query register under the
+# "core" toolset (Fase 1), search under "search" (Fase 2).
+# payload/snapshots/admin/observability land in Fases 3-6, each adding one
+# module + one line here.
+_TOOL_MODULES = (core_tools, collections_tools, points_tools, query_tools, search_tools)
 
 
 def build_server(settings: Settings | None = None) -> MCPServer[None]:
