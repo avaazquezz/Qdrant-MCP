@@ -86,7 +86,7 @@ como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools).
   para los tests de integración.
 - `LICENSE` (MIT), `.github/dependabot.yml`, plantillas mínimas de issue/PR.
 
-### Fase 1 — `feat/core-collections-points` → v0.1.0 (MVP real) ✅ Cerrada (commiteada en `feat/core-collections-points`, pendiente de merge)
+### Fase 1 — `feat/core-collections-points` → v0.1.0 (MVP real) ✅ Cerrada (mergeada en `main` vía PR #2, tag `v0.1.0`)
 CRUD completo de colecciones y points + búsqueda vectorial básica. Con esto ya es un MCP
 usable de punta a punta y muy por encima del oficial.
 
@@ -99,7 +99,7 @@ usable de punta a punta y muy por encima del oficial.
   Fase 7): con `query`/`search`/`recommend`/`discover` solapándose a partir de la
   Fase 2, el LLM necesita desambiguación desde el MVP.
 
-### Fase 2 — `feat/search-advanced` → v0.2.0
+### Fase 2 — `feat/search-advanced` → v0.2.0 🔄 Abierta (rama `feat/search-advanced` creada, sin tools todavía)
 Todo lo demás bajo "Search" en la API de Qdrant.
 
 - `qdrant_query_batch`, `qdrant_query_groups`
