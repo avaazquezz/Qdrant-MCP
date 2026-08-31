@@ -36,11 +36,27 @@ class Settings(BaseModel):
     read_only: bool = False
     transport: Transport = "stdio"
     toolsets: tuple[Toolset, ...] = DEFAULT_TOOLSETS
+    shared_secret: str | None = None
+    http_host: str = "127.0.0.1"
+    http_port: int = 8000
 
     @model_validator(mode="after")
     def _check_single_connection_target(self) -> Settings:
         if self.qdrant_url and self.qdrant_local_path:
             raise ValueError("Set only one of QDRANT_URL or QDRANT_LOCAL_PATH, not both.")
+        return self
+
+    @model_validator(mode="after")
+    def _require_shared_secret_for_streamable_http(self) -> Settings:
+        # Verified hands-on (a real public tunnel + Claude.ai's own connector
+        # UI) that an unauthenticated streamable-http server is trivially
+        # usable by anyone with the URL — refuse to start that way silently.
+        if self.transport == "streamable-http" and not self.shared_secret:
+            raise ValueError(
+                "QDRANT_MCP_SHARED_SECRET is required when "
+                "QDRANT_MCP_TRANSPORT=streamable-http, to avoid serving an "
+                "unauthenticated endpoint over the network."
+            )
         return self
 
     @classmethod
@@ -61,6 +77,9 @@ class Settings(BaseModel):
             read_only=_parse_bool(e.get("QDRANT_MCP_READ_ONLY")),
             transport=e.get("QDRANT_MCP_TRANSPORT", "stdio"),  # type: ignore[arg-type]
             toolsets=toolsets,  # type: ignore[arg-type]
+            shared_secret=e.get("QDRANT_MCP_SHARED_SECRET") or None,
+            http_host=e.get("QDRANT_MCP_HTTP_HOST", "127.0.0.1"),
+            http_port=int(e.get("QDRANT_MCP_HTTP_PORT", "8000")),
         )
 
 

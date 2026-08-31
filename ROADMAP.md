@@ -219,19 +219,48 @@ proyecto (despliegue de un solo nodo). Los números de fase/versión posteriores
   alcance, coherente con haber descartado la Fase 5). `call_qdrant` sigue funcionando
   igual sin cambios; solo hay que desenvolver `.result` del sobre de respuesta a mano.
 
-### Fase 7 — `feat/packaging-and-dx` → v1.0.0
+### Fase 7 — `feat/packaging-and-dx` → v1.0.0 ✅ Cerrada
 Hardening y distribución, no tools nuevas. (El guardarraíl `QDRANT_MCP_READ_ONLY` y
 las descripciones ricas de tools ya se resolvieron en Fase 0 y Fase 1
 respectivamente — no se repiten aquí.)
 
 - Publicación en PyPI, imagen Docker, manifest para Claude Desktop (`.mcpb`).
-- Tabla de tools del README pasa a generarse automáticamente desde los schemas
-  Pydantic (`scripts/gen_tools_doc.py` + check en CI que falla si el README diverge) —
-  sustituye el mantenimiento manual de las fases anteriores.
+- Tabla de tools del README pasa a generarse automáticamente desde el registro vivo de
+  tools (`scripts/gen_tools_doc.py`, vía `list_tools()` — la misma vista que ve un
+  cliente MCP real, no un re-parseo manual de los schemas Pydantic + check en CI que
+  falla si el README diverge) — sustituye el mantenimiento manual de las fases
+  anteriores.
 - README con guía de configuración completa
   (`claude_desktop_config.json` / Claude Code `.mcp.json`).
 - Checklist de lanzamiento de v1.0.0 (visibilidad, no DoD de código): envío del server a
   `modelcontextprotocol/servers`, Smithery y demás registries de MCP relevantes.
+
+**Añadido no previsto en el roadmap original, confirmado en vivo contra una cuenta real
+de Claude.ai**: el transporte `streamable-http` corría sin ninguna autenticación — se
+añade `QDRANT_MCP_SHARED_SECRET` (obligatorio si `QDRANT_MCP_TRANSPORT=streamable-http`,
+el arranque falla alto si falta) y un middleware que exige `Authorization: Bearer
+<secreto>`. Verificado en vivo con un túnel público real + el panel de "Añadir
+conector personalizado" de Claude.ai: la cabecera `Authorization` es una de las dos que
+Claude.ai permite sin aprobación manual de Anthropic; el ciclo completo (levantar en
+`streamable-http`, sin cabecera → 401, con cabecera correcta → 200) se probó contra un
+servidor real, en local y en Docker.
+
+**Hallazgo sobre `.mcpb`**: el spec de `modelcontextprotocol/mcpb` define un tipo de
+servidor `"uv"` (manifest v0.4+) pensado exactamente para proyectos `uv` — el propio
+`uv` resuelve las dependencias del `pyproject.toml` en la máquina del usuario sin que
+haga falta vendorizar nada dentro del bundle, y sin que el usuario necesite tener Python
+ya instalado (uv se encarga). Bundle final validado con el CLI oficial
+(`mcpb validate`/`mcpb pack`): ~136 KB, dentro del rango que promete el spec para este
+tipo de servidor.
+
+**Checklist de lanzamiento v1.0.0** (visibilidad — acciones externas, no automatizables
+desde aquí):
+- [ ] Dar de alta "Trusted Publishing" para `mcp-qdrant` en pypi.org (Settings →
+      Publishing), apuntando a este repo/workflow.
+- [ ] Crear el GitHub Environment `pypi` en la configuración del repo.
+- [ ] Empujar el primer tag `v1.0.0` (dispara `publish.yml`/`docker.yml`/`mcpb.yml`).
+- [ ] Enviar PR a `modelcontextprotocol/servers` añadiendo este servidor al listado.
+- [ ] Dar de alta el servidor en Smithery.
 
 ### Fase 8 — `feat/landing-page` (post v1.0.0, sin bump de semver del paquete)
 Landing de marketing del producto. Vive en `/website`, build independiente del paquete

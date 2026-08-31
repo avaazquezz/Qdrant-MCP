@@ -1,0 +1,71 @@
+{
+  "manifest_version": "0.4",
+  "name": "mcp-qdrant",
+  "display_name": "Qdrant MCP",
+  "version": "1.0.0",
+  "description": "MCP server that wraps the Qdrant vector database API as tools.",
+  "author": {
+    "name": "Adrián"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/avaazquezz/Qdrant-MCP"
+  },
+  "license": "MIT",
+  "server": {
+    "type": "uv",
+    "entry_point": "src/mcp_qdrant/cli.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "src/mcp_qdrant/cli.py"],
+      "env": {
+        "QDRANT_URL": "${user_config.qdrant_url}",
+        "QDRANT_API_KEY": "${user_config.qdrant_api_key}",
+        "QDRANT_LOCAL_PATH": "${user_config.qdrant_local_path}",
+        "QDRANT_MCP_TOOLSETS": "${user_config.toolsets}",
+        "QDRANT_MCP_READ_ONLY": "${user_config.read_only}"
+      }
+    }
+  },
+  "user_config": {
+    "qdrant_url": {
+      "type": "string",
+      "title": "Qdrant URL",
+      "description": "e.g. http://localhost:6333 — leave blank if using a local path instead.",
+      "required": false
+    },
+    "qdrant_api_key": {
+      "type": "string",
+      "title": "Qdrant API key",
+      "description": "Only needed if your Qdrant instance requires one.",
+      "sensitive": true,
+      "required": false
+    },
+    "qdrant_local_path": {
+      "type": "string",
+      "title": "Qdrant local path",
+      "description": "Path to an embedded Qdrant instance, instead of a URL.",
+      "required": false
+    },
+    "toolsets": {
+      "type": "string",
+      "title": "Enabled toolsets",
+      "description": "Comma-separated: core, search, payload, snapshots, observability.",
+      "default": "core",
+      "required": false
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-only mode",
+      "description": "Block every tool not marked read-only.",
+      "default": false,
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "linux", "win32"],
+    "runtimes": {
+      "python": ">=3.12"
+    }
+  }
+}
