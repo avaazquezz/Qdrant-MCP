@@ -332,9 +332,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         ]}
         """
         built = [r.to_request() for r in requests]
-        return await call_qdrant(
-            lambda: client.query_batch_points(collection_name, requests=built)
-        )
+        return await call_qdrant(lambda: client.query_batch_points(collection_name, requests=built))
 
     async def qdrant_recommend_groups(
         collection_name: str,
@@ -420,9 +418,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         ]}
         """
         built = [r.to_request() for r in requests]
-        return await call_qdrant(
-            lambda: client.query_batch_points(collection_name, requests=built)
-        )
+        return await call_qdrant(lambda: client.query_batch_points(collection_name, requests=built))
 
     async def qdrant_distance_matrix_pairs(
         collection_name: str,
@@ -463,9 +459,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         )
 
     registry.register(qdrant_query_batch, toolset="search", annotations=_QUERY_BATCH_ANNOTATIONS)
-    registry.register(
-        qdrant_query_groups, toolset="search", annotations=_QUERY_GROUPS_ANNOTATIONS
-    )
+    registry.register(qdrant_query_groups, toolset="search", annotations=_QUERY_GROUPS_ANNOTATIONS)
     registry.register(qdrant_recommend, toolset="search", annotations=_RECOMMEND_ANNOTATIONS)
     registry.register(
         qdrant_recommend_batch, toolset="search", annotations=_RECOMMEND_BATCH_ANNOTATIONS
