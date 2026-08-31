@@ -14,7 +14,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
-from qdrant_client.http.models import CollectionDescription, CollectionInfo, CollectionsResponse
+from qdrant_client.http.models import (
+    CollectionDescription,
+    CollectionInfo,
+    CollectionsResponse,
+    Disabled,
+)
 
 from mcp_qdrant.tools import collections as collections_tools
 from mcp_qdrant.tools.collections import CollectionDeleteResult, CollectionExistsResult
@@ -72,6 +77,47 @@ async def test_collection_create_duplicate_raises_tool_error_with_real_message()
         )
 
 
+async def test_collection_create_requires_exactly_one_of_vector_size_or_vectors() -> None:
+    server = _build(cast(AsyncQdrantClient, AsyncMock()))
+
+    with pytest.raises(ToolError, match="exactly one"):
+        await server.call_tool("qdrant_collection_create", {"collection_name": "docs"})
+
+    with pytest.raises(ToolError, match="exactly one"):
+        await server.call_tool(
+            "qdrant_collection_create",
+            {
+                "collection_name": "docs",
+                "vector_size": 4,
+                "vectors": {"dense": {"size": 4, "distance": "Cosine"}},
+            },
+        )
+
+
+async def test_collection_create_named_vectors_and_sparse(
+    make_collection_info: Callable[..., CollectionInfo],
+) -> None:
+    mock = AsyncMock()
+    mock.create_collection.return_value = True
+    mock.get_collection.return_value = make_collection_info(points_count=0)
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    result = await server.call_tool(
+        "qdrant_collection_create",
+        {
+            "collection_name": "docs",
+            "vectors": {"dense": {"size": 4, "distance": "Cosine"}},
+            "sparse_vectors": {"sparse": {}},
+        },
+    )
+    assert isinstance(result, CallToolResult)
+    assert result.is_error is False
+
+    _, kwargs = mock.create_collection.call_args
+    assert "dense" in kwargs["vectors_config"]
+    assert "sparse" in kwargs["sparse_vectors_config"]
+
+
 async def test_collection_list_returns_collections_response() -> None:
     mock = AsyncMock()
     mock.get_collections.return_value = CollectionsResponse(
@@ -109,6 +155,25 @@ async def test_collection_update_returns_collection_info(
     assert isinstance(result, CallToolResult)
     payload = CollectionInfo.model_validate(result.structured_content)
     assert payload.points_count == 3
+
+
+async def test_collection_update_disables_quantization(
+    make_collection_info: Callable[..., CollectionInfo],
+) -> None:
+    mock = AsyncMock()
+    mock.update_collection.return_value = True
+    mock.get_collection.return_value = make_collection_info(points_count=0)
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    result = await server.call_tool(
+        "qdrant_collection_update",
+        {"collection_name": "docs", "quantization_config": "disabled"},
+    )
+    assert isinstance(result, CallToolResult)
+    assert result.is_error is False
+
+    _, kwargs = mock.update_collection.call_args
+    assert kwargs["quantization_config"] == Disabled.DISABLED
 
 
 async def test_collection_delete_returns_true_when_deleted() -> None:
