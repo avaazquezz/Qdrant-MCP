@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-09-01
+
+### Fixed
+- `QDRANT_MCP_BYO` mode: `AsyncQdrantClient` defaults `port` to `6333` and silently
+  appends it to any caller-supplied URL with no explicit port — verified hands-on (a
+  real HTTPS Qdrant behind a Cloudflare tunnel on the standard port 443) that this
+  broke any Qdrant reachable over plain HTTPS/HTTP without an explicit port in its URL,
+  which is a very plausible self-hosted setup (e.g. behind a normal reverse proxy).
+  `QdrantClientCache` now derives and passes the correct port explicitly (443/80 from
+  the URL's scheme when none is given).
+
 ## [1.1.0] - 2026-09-01
 
 Fase 8 — a second, public deployment mode where the operator hosts no data at all.
