@@ -160,11 +160,28 @@ resto de tests de integración de Fases 1-2 se re-verificaron sin cambios contra
 (de paso, desaparece el aviso de incompatibilidad de versión cliente/servidor
 documentado desde la Fase 0).
 
-### Fase 4 — `feat/snapshots` → v0.4.0
+### Fase 4 — `feat/snapshots` → v0.4.0 ✅ Cerrada
 Backup/restore, a nivel colección y storage completo.
 
 - `qdrant_snapshot_create`, `_list`, `_delete`, `_recover`, `_download` (por colección)
 - `qdrant_storage_snapshot_create`, `_list`, `_delete`, `_download`
+
+**Hallazgo verificado durante la Fase 4** (probado en vivo, no asumido): el único
+método que ofrece `qdrant-client==1.19.0` para "descargar" un snapshot
+(`client.http.snapshots_api.get_snapshot`/`get_full_snapshot`, ni siquiera expuesto en
+el cliente de alto nivel) siempre intenta parsear la respuesta como JSON — contra un
+snapshot real (binario) revienta con `UnicodeDecodeError`. Tampoco tendría sentido
+meter un fichero de gigabytes en la respuesta de un tool MCP. Consecuencia:
+`qdrant_snapshot_download`/`qdrant_storage_snapshot_download` no devuelven bytes —
+confirman que el snapshot existe (vía `list_snapshots`/`list_full_snapshots`, dentro
+del SDK) y devuelven su descriptor más la URL REST donde se sirve; quien llama se lo
+descarga por su cuenta. Verificado también en vivo que esa URL es directamente
+reutilizable como `location` de `qdrant_snapshot_recover` (ciclo completo probado:
+crear → descargar URL → borrar un punto → recuperar → el punto vuelve), siempre que esa
+URL la pueda alcanzar el propio servidor Qdrant (no necesariamente quien llama al MCP —
+matiz relevante si Qdrant corre detrás de un remapeo de puertos Docker o un proxy). No
+existe `qdrant_storage_snapshot_recover`: restaurar el storage completo se hace con el
+servidor parado, no es una llamada en caliente.
 
 ### Fase 5 — `feat/aliases-cluster-admin` → v0.5.0 (marcar como avanzado/opcional)
 Requiere Qdrant en modo distribuido para tener sentido pleno; documentar claramente que

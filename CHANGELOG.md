@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-31
+
+### Added
+- New `snapshots` toolset (opt-in via `QDRANT_MCP_TOOLSETS=core,snapshots`): `qdrant_snapshot_create`, `_list`, `_delete`, `_recover`, `_download` (per collection), and `qdrant_storage_snapshot_create`, `_list`, `_delete`, `_download` (whole storage). No `qdrant_storage_snapshot_recover` — restoring a full-storage snapshot happens with the server stopped, pointed at the file at startup, not via a live API call.
+
+### Design note: snapshot download returns a URL, not the file
+Verified hands-on that `qdrant-client==1.19.0`'s only "download a snapshot" method (`client.http.snapshots_api.get_snapshot`/`get_full_snapshot`, not even exposed on the high-level client) always calls `response.json()` on the response — it crashes with `UnicodeDecodeError` against a real (binary) snapshot file. There is also no reasonable way to carry a multi-megabyte-to-gigabyte binary blob through an MCP tool result. So `qdrant_snapshot_download`/`qdrant_storage_snapshot_download` confirm the snapshot exists (via `list_snapshots`/`list_full_snapshots`, fully within the SDK) and return its descriptor plus the REST URL it's served at — fetch it yourself (`curl`, etc.). Verified hands-on that this URL is directly reusable as `qdrant_snapshot_recover`'s `location` (full round-trip: create → download → mutate → recover → data restored), as long as that URL is reachable **from the Qdrant server itself** — which may differ from the URL used to reach it from outside when Qdrant runs behind Docker port-remapping or a reverse proxy.
+
+### Changed
+- `src/mcp_qdrant/server.py`: `snapshots_tools.register()` is the first tool module to need more than `(registry, client)` — it also takes the configured `QDRANT_URL`, to build the download URLs above. No other module's `register()` signature changed.
+
 ## [0.3.0] - 2026-08-31
 
 ### Changed — minimum supported Qdrant server raised to v1.19.0
