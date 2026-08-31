@@ -40,3 +40,12 @@ MCP server that wraps the Qdrant vector database API as tools. See [ROADMAP.md](
 | `qdrant_points_batch_update` | `payload` | ❌ | ✅ | ❌ | Runs multiple point operations atomically in one call. |
 | `qdrant_vectors_update` | `payload` | ❌ | ✅ | ✅ | Replaces the vector(s) of existing points by id. |
 | `qdrant_vectors_delete` | `payload` | ❌ | ✅ | ✅ | Removes specific named vectors from selected points. |
+| `qdrant_snapshot_create` | `snapshots` | ❌ | ❌ | ❌ | Creates a snapshot of one collection's current state. |
+| `qdrant_snapshot_list` | `snapshots` | ✅ | ❌ | ✅ | Lists the snapshots stored for one collection. |
+| `qdrant_snapshot_delete` | `snapshots` | ❌ | ✅ | ✅ | Deletes a collection snapshot. |
+| `qdrant_snapshot_recover` | `snapshots` | ❌ | ✅ | ✅ | Overwrites a collection with the state captured in a snapshot. |
+| `qdrant_snapshot_download` | `snapshots` | ✅ | ❌ | ✅ | Returns a collection snapshot's download URL (does not transfer the file itself). |
+| `qdrant_storage_snapshot_create` | `snapshots` | ❌ | ❌ | ❌ | Creates a snapshot of the whole storage (every collection + server config). |
+| `qdrant_storage_snapshot_list` | `snapshots` | ✅ | ❌ | ✅ | Lists the full-storage snapshots on the server. |
+| `qdrant_storage_snapshot_delete` | `snapshots` | ❌ | ✅ | ✅ | Deletes a full-storage snapshot. |
+| `qdrant_storage_snapshot_download` | `snapshots` | ✅ | ❌ | ✅ | Returns a full-storage snapshot's download URL. No live `_recover` exists — restoring the whole storage requires a server restart pointed at the file. |

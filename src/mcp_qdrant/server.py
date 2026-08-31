@@ -16,6 +16,7 @@ from mcp_qdrant.tools import payload as payload_tools
 from mcp_qdrant.tools import points as points_tools
 from mcp_qdrant.tools import query as query_tools
 from mcp_qdrant.tools import search as search_tools
+from mcp_qdrant.tools import snapshots as snapshots_tools
 from mcp_qdrant.tools import vectors as vectors_tools
 from mcp_qdrant.tools.registry import ToolRegistry
 
@@ -23,8 +24,10 @@ SERVER_NAME = "mcp-qdrant"
 
 # One entry per tool module; collections/points/query register under the
 # "core" toolset (Fase 1), search under "search" (Fase 2), payload/vectors
-# under "payload" (Fase 3). snapshots/admin/observability land in Fases 4-6,
-# each adding one module + one line here.
+# under "payload" (Fase 3). admin/observability land in Fases 5-6, each
+# adding one module + one line here. `snapshots_tools` (Fase 4) is wired up
+# separately below: it's the only module whose `register()` also needs the
+# configured QDRANT_URL, to build snapshot download URLs.
 _TOOL_MODULES = (
     core_tools,
     collections_tools,
@@ -54,4 +57,5 @@ def build_server(settings: Settings | None = None) -> MCPServer[None]:
     )
     for module in _TOOL_MODULES:
         module.register(registry, client)
+    snapshots_tools.register(registry, client, settings.qdrant_url)
     return server
