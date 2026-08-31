@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import cast
 
 from mcp.server import MCPServer
+from qdrant_client import AsyncQdrantClient
 
 from mcp_qdrant import __version__
+from mcp_qdrant.byo_qdrant import BYOQdrantClientProxy
 from mcp_qdrant.config import Settings
 from mcp_qdrant.qdrant_client import build_qdrant_client
+from mcp_qdrant.qdrant_client_cache import QdrantClientCache
 from mcp_qdrant.tools import collections as collections_tools
 from mcp_qdrant.tools import core as core_tools
 from mcp_qdrant.tools import observability as observability_tools
@@ -40,10 +44,22 @@ _TOOL_MODULES = (
 )
 
 
-def build_server(settings: Settings | None = None) -> MCPServer[None]:
-    """Construct the MCPServer: one shared AsyncQdrantClient, filtered toolsets."""
+def build_server(
+    settings: Settings | None = None, *, qdrant_client_cache: QdrantClientCache | None = None
+) -> MCPServer[None]:
+    """Construct the MCPServer: one shared AsyncQdrantClient, filtered toolsets.
+
+    In BYO mode (`settings.byo_qdrant`), `client` is a proxy that resolves
+    the real client per request from `qdrant_client_cache` instead of a
+    single fixed `AsyncQdrantClient` — every tool module closes over it
+    identically either way, since attribute lookups on it are lazy.
+    """
     settings = settings or Settings.from_env()
-    client = build_qdrant_client(settings)
+    if settings.byo_qdrant:
+        assert qdrant_client_cache is not None
+        client = cast(AsyncQdrantClient, BYOQdrantClientProxy(qdrant_client_cache))
+    else:
+        client = build_qdrant_client(settings)
 
     @asynccontextmanager
     async def lifespan(_: MCPServer[None]) -> AsyncIterator[None]:

@@ -65,3 +65,51 @@ def test_http_host_and_port_defaults_and_override() -> None:
     )
     assert settings.http_host == "0.0.0.0"
     assert settings.http_port == 9000
+
+
+def test_byo_defaults_to_false() -> None:
+    assert Settings.from_env({}).byo_qdrant is False
+
+
+def test_byo_requires_streamable_http() -> None:
+    with pytest.raises(ValueError, match="requires QDRANT_MCP_TRANSPORT=streamable-http"):
+        Settings.from_env({"QDRANT_MCP_BYO": "1"})
+
+
+def test_byo_is_incompatible_with_qdrant_url() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        Settings.from_env(
+            {
+                "QDRANT_MCP_BYO": "1",
+                "QDRANT_MCP_TRANSPORT": "streamable-http",
+                "QDRANT_URL": "http://localhost:6333",
+            }
+        )
+
+
+def test_byo_is_incompatible_with_qdrant_local_path() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        Settings.from_env(
+            {
+                "QDRANT_MCP_BYO": "1",
+                "QDRANT_MCP_TRANSPORT": "streamable-http",
+                "QDRANT_LOCAL_PATH": "/tmp/qdrant",
+            }
+        )
+
+
+def test_byo_does_not_require_shared_secret() -> None:
+    settings = Settings.from_env({"QDRANT_MCP_BYO": "1", "QDRANT_MCP_TRANSPORT": "streamable-http"})
+    assert settings.byo_qdrant is True
+    assert settings.shared_secret is None
+
+
+def test_byo_allows_optional_shared_secret() -> None:
+    settings = Settings.from_env(
+        {
+            "QDRANT_MCP_BYO": "1",
+            "QDRANT_MCP_TRANSPORT": "streamable-http",
+            "QDRANT_MCP_SHARED_SECRET": "s3cr3t",
+        }
+    )
+    assert settings.shared_secret == "s3cr3t"

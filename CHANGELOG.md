@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-09-01
+
+Fase 8 — a second, public deployment mode where the operator hosts no data at all.
+
+### Added
+- `QDRANT_MCP_BYO`: a "bring your own Qdrant" mode for `streamable-http` — every caller
+  supplies their own Qdrant URL (and optional API key) per request instead of using a
+  fixed instance the operator hosts. Isolation between callers is automatic (each one
+  talks to their own database), so this mode needs no shared secret, no per-user
+  accounts, and no namespacing.
+- `BYOQdrantClientProxy` + `QdrantClientCache`: a per-request client resolved via
+  `contextvars`, cached with a bounded LRU (default 256 entries, delayed close on
+  eviction) so repeated calls from the same caller reuse one connection.
+- `ssrf_guard.py`: mandatory validation that a caller-supplied Qdrant URL doesn't
+  resolve to a private/loopback/link-local address before ever connecting to it —
+  re-resolved on every request to also catch DNS rebinding. Not optional: this server
+  makes outbound requests to a URL an untrusted caller controls, from a host that also
+  runs other clients' services on internal Docker networks.
+- `BYOQdrantMiddleware`: reuses the `Authorization` (required, carries the Qdrant URL)
+  and `x-api-key` (optional, carries the Qdrant API key) headers for this purpose —
+  verified hands-on that Claude.ai's custom-connector UI rejects made-up header names
+  like `X-Qdrant-Url` without Anthropic's manual approval, so this reuses two
+  pre-approved ones instead.
+- `Settings.byo_qdrant`: mutually exclusive with `QDRANT_URL`/`QDRANT_LOCAL_PATH`,
+  requires `QDRANT_MCP_TRANSPORT=streamable-http`, and relaxes the existing
+  `QDRANT_MCP_SHARED_SECRET` requirement (still supported as an optional low-noise
+  anti-bot gate on top of BYO, but not required — there's no shared data behind this
+  instance to protect).
+
+### Changed
+- Nothing about the existing fixed-Qdrant deployment: `byo_qdrant=False` (the default)
+  is byte-for-byte the same code path as `v1.0.1`.
+
 ## [1.0.1] - 2026-08-31
 
 ### Added
