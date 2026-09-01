@@ -6,10 +6,14 @@ useSeoMeta({
   ogTitle: 'Qdrant MCP',
   ogDescription:
     'The full Qdrant API as MCP tools — not just store/find. Full collection & point lifecycle, every search mode, snapshots, observability.',
+  ogUrl: 'https://mcp-qdrant-web.vazquezlabs.com/',
 })
 useHead({
   htmlAttrs: { lang: 'en' },
-  link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+  link: [
+    { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+    { rel: 'canonical', href: 'https://mcp-qdrant-web.vazquezlabs.com/' },
+  ],
 })
 </script>
 
