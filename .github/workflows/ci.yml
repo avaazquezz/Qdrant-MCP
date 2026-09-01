@@ -19,6 +19,7 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run python scripts/gen_tools_doc.py --check
+      - run: uv run python scripts/gen_tools_json.py --check
 
   typecheck:
     runs-on: ubuntu-latest
