@@ -32,8 +32,9 @@ useReveal(root, () => {
   })
 
   steps.forEach((step, i) => {
-    tl.to(calls[i], { opacity: 1, duration: 0.2 })
+    tl.to(calls[i], { opacity: 1, duration: 0.2, onStart: () => calls[i].classList.add('term-call--active') })
       .to(calls[i], { text: step.call, duration: Math.min(step.call.length * 0.012, 1.1), ease: 'none' })
+      .call(() => calls[i].classList.remove('term-call--active'))
       .to(results[i], { opacity: 1, y: 0, duration: 0.3 }, '+=0.1')
   })
 })
@@ -53,3 +54,28 @@ useReveal(root, () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.term-call--active::after {
+  content: '▍';
+  animation: term-blink 1s step-end infinite;
+  color: #7c6cff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .term-call--active::after {
+    animation: none;
+  }
+}
+
+@keyframes term-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+</style>

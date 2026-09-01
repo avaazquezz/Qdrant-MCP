@@ -15,6 +15,20 @@ useReveal(root, () => {
       scrollTrigger: { trigger: el, start: 'top 80%', once: true },
     })
   })
+
+  const countEl = root.value?.querySelector<HTMLElement>('.tool-count')
+  if (countEl) {
+    const counter = { val: 0 }
+    countEl.textContent = '0'
+    gsap.to(counter, {
+      val: toolCount,
+      duration: 1.4,
+      ease: 'power1.out',
+      snap: { val: 1 },
+      scrollTrigger: { trigger: countEl, start: 'top 85%', once: true },
+      onUpdate: () => (countEl.textContent = String(Math.round(counter.val))),
+    })
+  }
 })
 </script>
 
@@ -29,7 +43,7 @@ useReveal(root, () => {
     </div>
 
     <div class="reveal mt-2 flex flex-col gap-8 sm:flex-row sm:items-center">
-      <p class="font-display text-7xl italic text-paper sm:text-8xl">{{ toolCount }}</p>
+      <p class="tool-count font-display text-7xl italic text-paper sm:text-8xl">{{ toolCount }}</p>
       <div class="max-w-sm">
         <p class="font-mono text-sm uppercase tracking-[0.15em] text-pulse">tools, not two</p>
         <p class="mt-2 text-sm leading-relaxed text-dust">

@@ -29,7 +29,11 @@ const snippets = [
 
 <template>
   <div class="grid gap-4 sm:grid-cols-2">
-    <div v-for="s in snippets" :key="s.title" class="border border-hairline bg-graphite p-4">
+    <div
+      v-for="s in snippets"
+      :key="s.title"
+      class="border border-hairline bg-graphite p-4 transition-colors hover:border-signal/40"
+    >
       <div class="mb-2 flex items-center justify-between">
         <p class="font-mono text-xs uppercase tracking-wide text-dust">{{ s.title }}</p>
         <UiCopyButton :text="s.code" />
