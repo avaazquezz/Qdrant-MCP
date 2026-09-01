@@ -32,9 +32,20 @@ useReveal(root, () => {
       <ProductToolCatalog />
     </div>
 
-    <p class="reveal mt-20 font-mono text-xs uppercase tracking-[0.25em] text-dust/70">get it running</p>
+    <p class="reveal mt-20 font-mono text-xs uppercase tracking-[0.25em] text-dust/70">quick install</p>
     <div class="reveal mt-8">
       <ProductInstallSnippets />
     </div>
+
+    <p class="reveal mt-20 font-mono text-xs uppercase tracking-[0.25em] text-dust/70">
+      connect your own qdrant
+    </p>
+    <h2 class="reveal mt-4 font-display text-3xl italic text-paper">
+      Self-hosted, on your own server
+    </h2>
+    <p class="reveal mt-2 max-w-xl text-dust">
+      The full path — Docker Compose for Qdrant, Claude Code over stdio, claude.ai over BYO mode.
+    </p>
+    <ProductConnectGuide />
   </section>
 </template>
