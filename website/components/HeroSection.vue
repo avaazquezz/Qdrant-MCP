@@ -7,25 +7,30 @@ useReveal(root, () => {
   gsap
     .timeline({ defaults: { ease: 'power2.out' } })
     .from('.hero-eyebrow', { y: 16, opacity: 0, duration: 0.5 })
-    .from('.hero-wordmark', { y: 40, opacity: 0, duration: 0.8 }, '-=0.25')
-    .from('.hero-subtitle', { y: 20, opacity: 0, duration: 0.6 }, '-=0.4')
+    .from(
+      '.hero-wordmark',
+      { y: 40, opacity: 0, filter: 'blur(16px)', scale: 1.04, duration: 1 },
+      '-=0.25'
+    )
+    .from('.hero-subtitle', { y: 20, opacity: 0, duration: 0.6 }, '-=0.5')
     .from('.hero-cta-row > *', { y: 16, opacity: 0, duration: 0.5, stagger: 0.08 }, '-=0.3')
+    .from('.hero-corner', { opacity: 0, duration: 0.6, stagger: 0.08 }, '-=1')
 })
 </script>
 
 <template>
   <section ref="root" class="relative overflow-hidden border-b border-hairline">
     <div class="pointer-events-none absolute inset-0 opacity-[0.35]">
-      <VectorField />
+      <VectorField parallax />
     </div>
     <div
       class="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink via-ink/60 to-ink"
     />
 
-    <span class="pointer-events-none absolute left-6 top-6 font-mono text-[10px] text-dust/50 sm:left-10 sm:top-10">+</span>
-    <span class="pointer-events-none absolute right-6 top-6 font-mono text-[10px] text-dust/50 sm:right-10 sm:top-10">+</span>
-    <span class="pointer-events-none absolute bottom-6 left-6 font-mono text-[10px] text-dust/50 sm:bottom-10 sm:left-10">+</span>
-    <span class="pointer-events-none absolute bottom-6 right-6 font-mono text-[10px] text-dust/50 sm:bottom-10 sm:right-10">+</span>
+    <span class="hero-corner pointer-events-none absolute left-6 top-6 font-mono text-[10px] text-dust/50 sm:left-10 sm:top-10">+</span>
+    <span class="hero-corner pointer-events-none absolute right-6 top-6 font-mono text-[10px] text-dust/50 sm:right-10 sm:top-10">+</span>
+    <span class="hero-corner pointer-events-none absolute bottom-6 left-6 font-mono text-[10px] text-dust/50 sm:bottom-10 sm:left-10">+</span>
+    <span class="hero-corner pointer-events-none absolute bottom-6 right-6 font-mono text-[10px] text-dust/50 sm:bottom-10 sm:right-10">+</span>
 
     <div class="relative mx-auto max-w-4xl px-6 pb-28 pt-36 text-center sm:pt-48">
       <p class="hero-eyebrow font-mono text-xs uppercase tracking-[0.25em] text-pulse">

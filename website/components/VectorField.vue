@@ -18,19 +18,64 @@ const neighbors: [number, number][] = [
   [340, 220],
 ]
 
-const props = withDefaults(defineProps<{ animated?: boolean }>(), { animated: true })
+const props = withDefaults(defineProps<{ animated?: boolean; parallax?: boolean }>(), {
+  animated: true,
+  parallax: false,
+})
 
 const root = ref<HTMLElement | null>(null)
+const parallaxGroup = ref<SVGGElement | null>(null)
 
 if (props.animated) {
   useReveal(root, () => {
     if (!root.value) return
+    const dots = root.value.querySelectorAll<SVGCircleElement>('.vf-dot')
     const lines = root.value.querySelectorAll<SVGLineElement>('.vf-line')
-    lines.forEach((line) => {
-      const len = line.getTotalLength()
-      gsap.set(line, { strokeDasharray: len, strokeDashoffset: len })
-      gsap.to(line, { strokeDashoffset: 0, duration: 0.9, ease: 'power2.out', delay: 0.3 })
+    const marks = root.value.querySelectorAll<SVGCircleElement>('.vf-mark')
+
+    gsap.set([dots, marks], { opacity: 0, scale: 0 })
+
+    const tl = gsap.timeline({ defaults: { ease: 'power2.out' } })
+    tl.to(dots, {
+      opacity: 1,
+      scale: 1,
+      duration: 0.5,
+      stagger: { each: 0.02, from: 'random' },
+      transformOrigin: 'center',
     })
+      .to(marks, { opacity: 1, scale: 1, duration: 0.4, stagger: 0.06, transformOrigin: 'center' }, '-=0.2')
+      .add(() => {
+        lines.forEach((line) => {
+          const len = line.getTotalLength()
+          gsap.fromTo(
+            line,
+            { strokeDasharray: len, strokeDashoffset: len },
+            { strokeDashoffset: 0, duration: 0.7, ease: 'power2.out' }
+          )
+        })
+      })
+  })
+}
+
+if (props.parallax) {
+  onMounted(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    if (!root.value || !parallaxGroup.value) return
+
+    const xTo = gsap.quickTo(parallaxGroup.value, 'x', { duration: 0.8, ease: 'power3' })
+    const yTo = gsap.quickTo(parallaxGroup.value, 'y', { duration: 0.8, ease: 'power3' })
+
+    function onMove(e: MouseEvent) {
+      if (!root.value) return
+      const rect = root.value.getBoundingClientRect()
+      const relX = (e.clientX - rect.left) / rect.width - 0.5
+      const relY = (e.clientY - rect.top) / rect.height - 0.5
+      xTo(relX * -14)
+      yTo(relY * -14)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    onBeforeUnmount(() => window.removeEventListener('mousemove', onMove))
   })
 }
 </script>
@@ -44,37 +89,39 @@ if (props.animated) {
       </linearGradient>
     </defs>
 
-    <circle
-      v-for="([x, y], i) in ambient"
-      :key="`a-${i}`"
-      :cx="x"
-      :cy="y"
-      r="2"
-      class="fill-dust/40"
-    />
+    <g ref="parallaxGroup">
+      <circle
+        v-for="([x, y], i) in ambient"
+        :key="`a-${i}`"
+        :cx="x"
+        :cy="y"
+        r="1.2"
+        class="vf-dot fill-dust/40"
+      />
 
-    <line
-      v-for="([x, y], i) in neighbors"
-      :key="`l-${i}`"
-      class="vf-line"
-      :x1="query[0]"
-      :y1="query[1]"
-      :x2="x"
-      :y2="y"
-      stroke="url(#vf-gradient)"
-      stroke-width="1.5"
-    />
+      <line
+        v-for="([x, y], i) in neighbors"
+        :key="`l-${i}`"
+        class="vf-line"
+        :x1="query[0]"
+        :y1="query[1]"
+        :x2="x"
+        :y2="y"
+        stroke="url(#vf-gradient)"
+        stroke-width="0.75"
+      />
 
-    <circle
-      v-for="([x, y], i) in neighbors"
-      :key="`n-${i}`"
-      :cx="x"
-      :cy="y"
-      r="3.5"
-      class="fill-pulse"
-    />
+      <circle
+        v-for="([x, y], i) in neighbors"
+        :key="`n-${i}`"
+        :cx="x"
+        :cy="y"
+        r="2.2"
+        class="vf-mark fill-pulse"
+      />
 
-    <circle :cx="query[0]" :cy="query[1]" r="5" class="fill-signal vf-query" />
+      <circle :cx="query[0]" :cy="query[1]" r="3" class="vf-mark fill-signal vf-query" />
+    </g>
   </svg>
 </template>
 
