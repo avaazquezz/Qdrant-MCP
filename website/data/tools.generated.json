@@ -1,0 +1,394 @@
+[
+  {
+    "name": "qdrant_health_check",
+    "toolset": "core",
+    "description": "Confirm the configured Qdrant instance is reachable and responding.\n\nNever raises to the caller: a health check that raises on the exact condition it exists to detect defeats its own purpose. Connection failures are logged and reported in the result's ok/error fields instead, so a client renders them without a tool-call error round-trip.",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_collection_create",
+    "toolset": "core",
+    "description": "Create a collection: either a single unnamed vector (`vector_size` + `distance`), or one or more named vectors (`vectors`, each a full `VectorParams` — size, distance, and optionally its own `multivector_config` for ColBERT-style multi-vectors or `quantization_config`) — exactly one of the two. `sparse_vectors` defines sparse (keyword-style) vectors at creation time. `quantization_config` (scalar/product/binary) and `strict_mode_config` apply to the whole collection.\n\nFails with a clear error if a collection with this name already exists.\n\nExample (simple): {\"collection_name\": \"docs\", \"vector_size\": 4, \"distance\": \"Cosine\"} Example (hybrid): {\"collection_name\": \"docs\", \"vectors\": { \"dense\": {\"size\": 4, \"distance\": \"Cosine\"} }, \"sparse_vectors\": {\"sparse\": {}}}",
+    "read_only": false,
+    "destructive": false,
+    "idempotent": false
+  },
+  {
+    "name": "qdrant_collection_list",
+    "toolset": "core",
+    "description": "List every collection name in the configured Qdrant instance.\n\nExample: {}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_collection_info",
+    "toolset": "core",
+    "description": "Return full config and status of one collection.\n\nFails with a clear error if the collection doesn't exist.\n\nExample: {\"collection_name\": \"docs\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_collection_update",
+    "toolset": "core",
+    "description": "Update optimizer/HNSW/collection/vector params on an existing collection.\n\nOnly the fields you pass are changed; omitted ones keep their current value. `quantization_config=\"disabled\"` turns quantization off. `vectors_config`/`sparse_vectors_config` only **adjust** named vectors that already exist (HNSW/quantization/index tuning) — they cannot add a new one; use `qdrant_collection_vector_create` for that, or this fails with Qdrant's own \"Not existing vector name\" error. Fails with a clear error if the collection doesn't exist.\n\nExample: {\"collection_name\": \"docs\", \"optimizers_config\": {\"indexing_threshold\": 10000}}",
+    "read_only": false,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_collection_delete",
+    "toolset": "core",
+    "description": "Delete a collection and all its points; a no-op if it doesn't exist.\n\nExample: {\"collection_name\": \"docs\"}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_collection_exists",
+    "toolset": "core",
+    "description": "Check whether a collection exists, without raising if it doesn't.\n\nExample: {\"collection_name\": \"docs\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_points_upsert",
+    "toolset": "core",
+    "description": "Insert or replace points (id + vector + payload) in a collection.\n\nFails with a clear error if the collection doesn't exist.\n\nExample: {\"collection_name\": \"docs\", \"points\": [ {\"id\": 1, \"vector\": [0.1, 0.2, 0.3, 0.4], \"payload\": {\"city\": \"ny\"}} ]}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_points_get",
+    "toolset": "core",
+    "description": "Retrieve points by id; unknown ids are simply omitted, not an error.\n\nFails only if the collection itself doesn't exist.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1, 2]}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_points_delete",
+    "toolset": "core",
+    "description": "Delete points by id list or by payload filter — exactly one of the two.\n\nDeleting an id that doesn't exist is not an error (Qdrant treats it as a no-op); this only fails if the collection itself is missing, or if you provide zero or both selectors.\n\nExample (by id): {\"collection_name\": \"docs\", \"ids\": [1, 2]} Example (by filter): {\"collection_name\": \"docs\", \"points_filter\": { \"must\": [{\"key\": \"city\", \"match\": {\"value\": \"ny\"}}] }}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_points_scroll",
+    "toolset": "core",
+    "description": "Page through all points in a collection, optionally filtered.\n\nPass the returned `next_page_offset` as `offset` to fetch the next page; `null` means there are no more pages.\n\nExample: {\"collection_name\": \"docs\", \"limit\": 50}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_points_count",
+    "toolset": "core",
+    "description": "Count points in a collection, optionally matching a filter.\n\nExample: {\"collection_name\": \"docs\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_query",
+    "toolset": "core",
+    "description": "Vector similarity search, with optional hybrid search over multiple prefetch stages.\n\nPass `query_vector` (a literal vector, or a point id to reuse an existing point's vector) for a plain nearest-vector query, or `fusion` + 2+ `prefetch` stages to combine multiple retrieval strategies via Reciprocal Rank Fusion (`fusion=\"rrf\"`) or Distribution-Based Score Fusion (`fusion=\"dbsf\"`) — exactly one of `query_vector`/`fusion` is required. `using` selects a named vector; `lookup_from` resolves `query_vector` from a point id in another collection instead of the current one. Fails with a clear error if the collection doesn't exist.\n\nExample (plain): {\"collection_name\": \"docs\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 5} Example (hybrid): {\"collection_name\": \"docs\", \"fusion\": \"rrf\", \"prefetch\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"using\": \"dense\", \"limit\": 20}, {\"query_vector\": [0.5, 0.5], \"using\": \"sparse\", \"limit\": 20} ], \"limit\": 5}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_query_batch",
+    "toolset": "search",
+    "description": "Run multiple independent queries against one collection in a single round trip — same query shapes as `qdrant_query` (plain vector or fusion+prefetch hybrid search), one per list item.\n\nExample: {\"collection_name\": \"docs\", \"queries\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 5}, {\"query_vector\": [0.5, 0.5, 0.5, 0.5], \"limit\": 5} ]}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_query_groups",
+    "toolset": "search",
+    "description": "Vector query grouped by a payload field, up to `group_size` hits per group — e.g. the best-matching chunks per source document. Same query shapes as `qdrant_query`.\n\nExample: {\"collection_name\": \"docs\", \"group_by\": \"document_id\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"group_size\": 2}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_recommend",
+    "toolset": "search",
+    "description": "Find points similar to a set of positive examples and dissimilar to a set of negative ones (vectors or point ids) — Qdrant's recommendation API. Requires at least one of `positive`/`negative`; the server rejects an empty request with a clear error.\n\nExample: {\"collection_name\": \"docs\", \"positive\": [1, 2], \"negative\": [7]}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_recommend_batch",
+    "toolset": "search",
+    "description": "Run multiple independent recommend queries against one collection in a single round trip.\n\nExample: {\"collection_name\": \"docs\", \"requests\": [ {\"positive\": [1], \"negative\": [7]}, {\"positive\": [2, 3]} ]}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_recommend_groups",
+    "toolset": "search",
+    "description": "Recommend query grouped by a payload field, up to `group_size` hits per group.\n\nExample: {\"collection_name\": \"docs\", \"group_by\": \"document_id\", \"positive\": [1, 2], \"group_size\": 2}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_discover",
+    "toolset": "search",
+    "description": "Rank points by how well they fit a target within positive/negative context pairs (vectors or point ids) — Qdrant's discovery search, a finer-grained alternative to recommend.\n\nExample: {\"collection_name\": \"docs\", \"target\": 1, \"context\": [ {\"positive\": 2, \"negative\": 7} ]}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_discover_batch",
+    "toolset": "search",
+    "description": "Run multiple independent discover queries against one collection in a single round trip.\n\nExample: {\"collection_name\": \"docs\", \"requests\": [ {\"target\": 1, \"context\": [{\"positive\": 2, \"negative\": 7}]} ]}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_distance_matrix_pairs",
+    "toolset": "search",
+    "description": "Pairwise distance matrix between a random sample of points: for each of `sample` points, its `limit` closest neighbors among that same sample — returned as a flat list of (a, b, score) pairs.\n\nExample: {\"collection_name\": \"docs\", \"sample\": 20, \"limit\": 5}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_distance_matrix_offsets",
+    "toolset": "search",
+    "description": "Same distance matrix as `qdrant_distance_matrix_pairs`, in a column-oriented shape (offsets into a shared id list + a parallel score array) — more compact for large samples.\n\nExample: {\"collection_name\": \"docs\", \"sample\": 20, \"limit\": 5}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_payload_set",
+    "toolset": "payload",
+    "description": "Merge fields into the payload of selected points — exactly one of `ids`/`points_filter`. Existing keys not in `payload` are kept. `key` sets a nested sub-field (e.g. `\"metadata.author\"`) instead of merging at the payload root.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1], \"payload\": {\"city\": \"ny\"}}",
+    "read_only": false,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_payload_overwrite",
+    "toolset": "payload",
+    "description": "Replace the entire payload of selected points with `payload` — exactly one of `ids`/`points_filter`. Unlike `qdrant_payload_set`, existing keys not in `payload` are dropped.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1], \"payload\": {\"city\": \"ny\"}}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_payload_delete",
+    "toolset": "payload",
+    "description": "Delete specific payload keys from selected points — exactly one of `ids`/`points_filter`. Other keys are untouched.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1], \"keys\": [\"city\"]}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_payload_clear",
+    "toolset": "payload",
+    "description": "Wipe the entire payload of selected points, keeping their vectors — exactly one of `ids`/`points_filter`.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1]}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_payload_facet",
+    "toolset": "payload",
+    "description": "Count distinct values of a payload field across the collection (or a filtered subset) — e.g. how many points per `city`. `exact` trades speed for an exact count instead of an approximation.\n\nExample: {\"collection_name\": \"docs\", \"key\": \"city\", \"limit\": 20}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_payload_index_create",
+    "toolset": "payload",
+    "description": "Create a payload index on `field_name`, speeding up filters that use it. `field_schema` can be a simple type name (\"keyword\", \"integer\", \"float\", \"geo\", \"text\", \"bool\", \"datetime\", \"uuid\") or a detailed params object (e.g. a `text` index with a specific tokenizer, or a `keyword` index marked `is_tenant`).\n\nExample: {\"collection_name\": \"docs\", \"field_name\": \"city\", \"field_schema\": \"keyword\"}",
+    "read_only": false,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_payload_index_delete",
+    "toolset": "payload",
+    "description": "Delete the payload index on `field_name`.\n\nExample: {\"collection_name\": \"docs\", \"field_name\": \"city\"}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_collection_vector_create",
+    "toolset": "payload",
+    "description": "Add a new named vector (dense or sparse) to a collection that already has points, without touching them.\n\nRequires a recent Qdrant server: verified hands-on that this 404s on v1.13.6 and v1.15.1, and works on v1.19.0 (this project's CI floor from Fase 3 onward) — pin your server accordingly. For `vector_kind=\"dense\"`, give both `size` and `distance` (optionally `multivector_comparator=\"max_sim\"` for ColBERT-style multi-vectors); for `\"sparse\"`, give neither and use `modifier`/`datatype` instead.\n\nExample (dense): {\"collection_name\": \"docs\", \"vector_name\": \"dense\", \"vector_kind\": \"dense\", \"size\": 4, \"distance\": \"Cosine\"} Example (sparse): {\"collection_name\": \"docs\", \"vector_name\": \"sparse\", \"vector_kind\": \"sparse\"}",
+    "read_only": false,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_collection_vector_delete",
+    "toolset": "payload",
+    "description": "Remove a named vector (dense or sparse) from a collection — points keep their other vectors and payload. Same server-version requirement as `qdrant_collection_vector_create`.\n\nExample: {\"collection_name\": \"docs\", \"vector_name\": \"sparse\"}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_points_batch_update",
+    "toolset": "payload",
+    "description": "Run multiple point operations (upsert, delete, set/overwrite/delete/clear payload, update/delete vectors) atomically against one collection, in the order given. Each item is one of Qdrant's own tagged operation shapes, keyed by operation name.\n\nExample: {\"collection_name\": \"docs\", \"operations\": [ {\"upsert\": {\"points\": [{\"id\": 1, \"vector\": [0.1, 0.2, 0.3, 0.4]}]}}, {\"delete_payload\": {\"keys\": [\"city\"], \"points\": [1]}} ]}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": false
+  },
+  {
+    "name": "qdrant_vectors_update",
+    "toolset": "payload",
+    "description": "Replace the vector(s) of existing points by id — leaves their payload untouched. For a named-vector collection, `vector` is a dict keyed by vector name; for a single unnamed vector, pass a plain vector.\n\nExample: {\"collection_name\": \"docs\", \"points\": [ {\"id\": 1, \"vector\": [0.1, 0.2, 0.3, 0.4]} ]}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_vectors_delete",
+    "toolset": "payload",
+    "description": "Remove specific named vectors from selected points, keeping their payload and other vectors — exactly one of `ids`/`points_filter`.\n\nExample: {\"collection_name\": \"docs\", \"vector_names\": [\"sparse\"], \"ids\": [1]}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_snapshot_create",
+    "toolset": "snapshots",
+    "description": "Create a snapshot of one collection's current state.\n\nExample: {\"collection_name\": \"docs\"}",
+    "read_only": false,
+    "destructive": false,
+    "idempotent": false
+  },
+  {
+    "name": "qdrant_snapshot_list",
+    "toolset": "snapshots",
+    "description": "List the snapshots stored for one collection.\n\nExample: {\"collection_name\": \"docs\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_snapshot_delete",
+    "toolset": "snapshots",
+    "description": "Delete a collection snapshot, freeing its disk space on the server — does not touch the live collection.\n\nExample: {\"collection_name\": \"docs\", \"snapshot_name\": \"docs-....snapshot\"}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_snapshot_recover",
+    "toolset": "snapshots",
+    "description": "Overwrite `collection_name` with the state captured in a snapshot — everything written since that snapshot is lost. Creates the collection if it doesn't exist.\n\n`location` must be reachable by the Qdrant **server itself**, not necessarily by whoever calls this tool: an HTTP(S) URL (e.g. from `qdrant_snapshot_download`) or a `file://` path on the server's own disk. If Qdrant runs behind Docker port-remapping or a reverse proxy, the URL the server needs may differ from the one used to reach it from outside — this tool does not try to guess that. `checksum` (SHA256) verifies integrity before recovering; `api_key` authenticates to a *remote* snapshot host, not this Qdrant instance.\n\nExample: {\"collection_name\": \"docs\", \"location\": \"http://localhost:6333/collections/docs/snapshots/docs-....snapshot\"}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_snapshot_download",
+    "toolset": "snapshots",
+    "description": "Confirm a collection snapshot exists and return where to fetch it from — this tool does not transfer the (potentially huge) snapshot file itself; download it yourself (e.g. `curl`) from the returned `url`.\n\nExample: {\"collection_name\": \"docs\", \"snapshot_name\": \"docs-....snapshot\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_storage_snapshot_create",
+    "toolset": "snapshots",
+    "description": "Create a snapshot of the whole storage (every collection and server config), not just one collection.\n\nExample: {}",
+    "read_only": false,
+    "destructive": false,
+    "idempotent": false
+  },
+  {
+    "name": "qdrant_storage_snapshot_list",
+    "toolset": "snapshots",
+    "description": "List the full-storage snapshots stored on the server.\n\nExample: {}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_storage_snapshot_delete",
+    "toolset": "snapshots",
+    "description": "Delete a full-storage snapshot, freeing its disk space.\n\nExample: {\"snapshot_name\": \"full-....snapshot\"}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_storage_snapshot_download",
+    "toolset": "snapshots",
+    "description": "Confirm a full-storage snapshot exists and return where to fetch it from — same caveat as `qdrant_snapshot_download`: this tool does not transfer the file itself.\n\nThere is no `qdrant_storage_snapshot_recover`: restoring a full storage snapshot is done with the server stopped, pointed at the snapshot file at startup — not a live API call.\n\nExample: {\"snapshot_name\": \"full-....snapshot\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_telemetry",
+    "toolset": "observability",
+    "description": "Server-wide telemetry: build info, per-collection stats, request counters, memory and hardware usage. Not tied to any one collection.\n\nExample: {}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_metrics_prometheus",
+    "toolset": "observability",
+    "description": "Return the URL where Qdrant serves Prometheus-format metrics — this tool does not fetch the metrics themselves (they're plain text, not JSON); point your Prometheus scraper at the returned `url` instead.\n\nExample: {}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_quotas_get",
+    "toolset": "observability",
+    "description": "Current server-wide resource quotas (memory/disk limits) and actual usage.\n\nExample: {}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_quotas_set",
+    "toolset": "observability",
+    "description": "Update server-wide resource quotas. Only the fields you pass are changed; omitted ones keep their current value.\n\nExample: {\"enabled\": true, \"max_resident_memory_percent\": 90}",
+    "read_only": false,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_issues_list",
+    "toolset": "observability",
+    "description": "List the issues Qdrant has detected about its own configuration (e.g. a heavily-filtered field with no payload index). **API Beta** in Qdrant itself — the exact shape can change without notice, so this is returned as-is rather than forced into a fixed schema.\n\nExample: {}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_issues_clear",
+    "toolset": "observability",
+    "description": "Clear all accumulated issues.\n\nExample: {}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  }
+]

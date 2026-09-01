@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 from mcp_types import Tool
 
@@ -20,6 +21,18 @@ from mcp_qdrant.server import build_server
 README_PATH = Path(__file__).resolve().parent.parent / "README.md"
 TABLE_START = "<!-- TOOLS_TABLE_START -->"
 TABLE_END = "<!-- TOOLS_TABLE_END -->"
+
+
+class ToolRow(TypedDict):
+    """Raw per-tool data, shared source of truth for the README table and
+    website/data/tools.generated.json (see scripts/gen_tools_json.py)."""
+
+    name: str
+    toolset: Toolset
+    description: str
+    read_only: bool | None
+    destructive: bool | None
+    idempotent: bool | None
 
 
 _ABBREVIATIONS = ("e.g", "i.e", "etc")
@@ -50,13 +63,25 @@ def _mark(value: bool | None) -> str:
     return "✅" if value else "❌"
 
 
+def _clean_description(description: str | None) -> str:
+    """Full docstring, whitespace-normalized but paragraph breaks kept —
+    unlike _summary(), which truncates to one sentence for the README table.
+    """
+    if not description:
+        return ""
+    paragraphs = description.strip().split("\n\n")
+    return "\n\n".join(" ".join(p.split()) for p in paragraphs)
+
+
 async def _tools_for_toolset(toolset: Toolset) -> list[Tool]:
     settings = Settings(qdrant_local_path=":memory:", toolsets=(toolset,))
     server = build_server(settings)
     return await server.list_tools()
 
 
-async def _collect_rows() -> list[str]:
+async def collect_tool_rows() -> list[ToolRow]:
+    """Shared source of truth: the same list_tools() data both the README
+    table and website/data/tools.generated.json are built from."""
     toolset_by_name: dict[str, Toolset] = {}
     for toolset in ALL_TOOLSETS:
         for tool in await _tools_for_toolset(toolset):
@@ -66,17 +91,32 @@ async def _collect_rows() -> list[str]:
     server = build_server(settings)
     all_tools = await server.list_tools()
 
-    rows = []
+    rows: list[ToolRow] = []
     for tool in all_tools:
         annotations = tool.annotations
         rows.append(
-            f"| `{tool.name}` | `{toolset_by_name[tool.name]}` "
-            f"| {_mark(annotations.read_only_hint if annotations else None)} "
-            f"| {_mark(annotations.destructive_hint if annotations else None)} "
-            f"| {_mark(annotations.idempotent_hint if annotations else None)} "
-            f"| {_summary(tool.description)} |"
+            ToolRow(
+                name=tool.name,
+                toolset=toolset_by_name[tool.name],
+                description=_clean_description(tool.description),
+                read_only=annotations.read_only_hint if annotations else None,
+                destructive=annotations.destructive_hint if annotations else None,
+                idempotent=annotations.idempotent_hint if annotations else None,
+            )
         )
     return rows
+
+
+async def _collect_markdown_rows() -> list[str]:
+    rows = await collect_tool_rows()
+    return [
+        f"| `{row['name']}` | `{row['toolset']}` "
+        f"| {_mark(row['read_only'])} "
+        f"| {_mark(row['destructive'])} "
+        f"| {_mark(row['idempotent'])} "
+        f"| {_summary(row['description'])} |"
+        for row in rows
+    ]
 
 
 def _render_table(rows: list[str]) -> str:
@@ -87,7 +127,7 @@ def _render_table(rows: list[str]) -> str:
 
 def main() -> int:
     check_only = "--check" in sys.argv
-    rows = asyncio.run(_collect_rows())
+    rows = asyncio.run(_collect_markdown_rows())
     new_table = _render_table(rows)
 
     readme = README_PATH.read_text()
