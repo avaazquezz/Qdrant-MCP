@@ -24,20 +24,21 @@ const badges = [
 </script>
 
 <template>
-  <section class="border-y border-border bg-surface/40 py-6">
+  <section class="border-b border-hairline py-5">
     <div class="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-x-8 gap-y-3 px-6">
+      <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-dust/70">verified —</span>
       <a
         v-for="badge in badges"
         :key="badge.alt"
         :href="badge.href"
         target="_blank"
         rel="noopener"
-        class="opacity-80 transition-opacity hover:opacity-100"
+        class="opacity-80 grayscale transition-all hover:opacity-100 hover:grayscale-0"
       >
         <img :src="badge.src" :alt="badge.alt" class="h-5" />
       </a>
-      <span class="font-mono text-xs text-text-secondary">
-        built on the official qdrant-client SDK
+      <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-dust/70">
+        — built on the official qdrant-client sdk
       </span>
     </div>
   </section>
