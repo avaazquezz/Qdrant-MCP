@@ -29,12 +29,12 @@ const snippets = [
 
 <template>
   <div class="grid gap-4 sm:grid-cols-2">
-    <div v-for="s in snippets" :key="s.title" class="rounded-lg border border-border bg-surface p-4">
+    <div v-for="s in snippets" :key="s.title" class="border border-hairline bg-graphite p-4">
       <div class="mb-2 flex items-center justify-between">
-        <p class="text-xs text-text-secondary">{{ s.title }}</p>
+        <p class="font-mono text-xs uppercase tracking-wide text-dust">{{ s.title }}</p>
         <UiCopyButton :text="s.code" />
       </div>
-      <pre class="overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs text-text-primary">{{ s.code }}</pre>
+      <pre class="overflow-x-auto whitespace-pre-wrap break-all font-mono text-xs text-paper">{{ s.code }}</pre>
     </div>
   </div>
 </template>

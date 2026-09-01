@@ -40,15 +40,14 @@ useReveal(root, () => {
 </script>
 
 <template>
-  <div ref="root" class="rounded-lg border border-border bg-[#0D0E13] p-5 font-mono text-sm">
-    <div class="mb-3 flex gap-1.5">
-      <span class="h-2.5 w-2.5 rounded-full bg-border" />
-      <span class="h-2.5 w-2.5 rounded-full bg-border" />
-      <span class="h-2.5 w-2.5 rounded-full bg-border" />
+  <div ref="root" class="border border-hairline bg-graphite p-5 font-mono text-sm">
+    <div class="mb-3 flex items-center justify-between border-b border-hairline pb-3">
+      <span class="text-[10px] uppercase tracking-[0.2em] text-dust/60">session.log</span>
+      <span class="h-1.5 w-1.5 rounded-full bg-pulse" />
     </div>
     <div v-for="(step, i) in steps" :key="i" class="mb-3 last:mb-0">
-      <p class="term-call whitespace-pre-wrap break-all text-accent opacity-0">&#8203;</p>
-      <p class="term-result mt-1 translate-y-1 whitespace-pre-wrap break-all text-text-secondary opacity-0">
+      <p class="term-call whitespace-pre-wrap break-all text-signal opacity-0">&#8203;</p>
+      <p class="term-result mt-1 translate-y-1 whitespace-pre-wrap break-all text-dust opacity-0">
         {{ step.result }}
       </p>
     </div>

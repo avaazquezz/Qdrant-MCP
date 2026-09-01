@@ -20,8 +20,8 @@ function firstParagraph(description: string) {
     <div class="flex flex-wrap gap-2">
       <button
         type="button"
-        class="rounded-full border px-3 py-1 font-mono text-xs transition-colors"
-        :class="active === 'all' ? 'border-accent text-accent' : 'border-border text-text-secondary hover:text-text-primary'"
+        class="border px-3 py-1 font-mono text-xs transition-colors"
+        :class="active === 'all' ? 'border-signal text-signal' : 'border-hairline text-dust hover:text-paper'"
         @click="active = 'all'"
       >
         all ({{ tools.length }})
@@ -30,29 +30,25 @@ function firstParagraph(description: string) {
         v-for="ts in toolsets"
         :key="ts"
         type="button"
-        class="rounded-full border px-3 py-1 font-mono text-xs transition-colors"
-        :class="active === ts ? 'border-accent text-accent' : 'border-border text-text-secondary hover:text-text-primary'"
+        class="border px-3 py-1 font-mono text-xs transition-colors"
+        :class="active === ts ? 'border-signal text-signal' : 'border-hairline text-dust hover:text-paper'"
         @click="active = ts"
       >
         {{ ts }}
       </button>
     </div>
 
-    <ul class="mt-6 max-h-[420px] space-y-2 overflow-y-auto pr-2">
-      <li
-        v-for="tool in filtered"
-        :key="tool.name"
-        class="rounded-md border border-border bg-surface p-4"
-      >
+    <ul class="mt-6 max-h-[420px] divide-y divide-hairline overflow-y-auto border-t border-hairline pr-2">
+      <li v-for="tool in filtered" :key="tool.name" class="py-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <code class="font-mono text-sm text-text-primary">{{ tool.name }}</code>
-          <div class="flex gap-1.5 font-mono text-[10px] uppercase tracking-wide text-text-secondary">
-            <span v-if="tool.read_only" class="rounded border border-border px-1.5 py-0.5">read-only</span>
-            <span v-if="tool.destructive" class="rounded border border-border px-1.5 py-0.5">destructive</span>
-            <span v-if="tool.idempotent" class="rounded border border-border px-1.5 py-0.5">idempotent</span>
+          <code class="font-mono text-sm text-paper">{{ tool.name }}</code>
+          <div class="flex gap-1.5 font-mono text-[10px] uppercase tracking-wide text-dust">
+            <span v-if="tool.read_only" class="border border-hairline px-1.5 py-0.5">read-only</span>
+            <span v-if="tool.destructive" class="border border-hairline px-1.5 py-0.5">destructive</span>
+            <span v-if="tool.idempotent" class="border border-hairline px-1.5 py-0.5">idempotent</span>
           </div>
         </div>
-        <p class="mt-1.5 line-clamp-2 text-sm text-text-secondary">{{ firstParagraph(tool.description) }}</p>
+        <p class="mt-1.5 line-clamp-2 text-sm text-dust">{{ firstParagraph(tool.description) }}</p>
       </li>
     </ul>
   </div>
