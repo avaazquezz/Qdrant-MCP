@@ -6,3 +6,11 @@ __pycache__/
 .pytest_cache/
 .coverage
 dist/
+
+# Node / Nuxt (website)
+website/node_modules/
+website/.nuxt/
+website/.output/
+website/dist
+website/.env
+website/.env.*

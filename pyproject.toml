@@ -32,9 +32,7 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "mcp_qdrant"
-# No /website directory exists yet (Fase 0). If docs land there later,
-# exclude it from the sdist so it never ships inside the package:
-# source-exclude = ["/website"]
+source-exclude = ["/website"]
 
 [dependency-groups]
 dev = [
