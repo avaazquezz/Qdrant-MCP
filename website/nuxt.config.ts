@@ -5,9 +5,9 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   fonts: {
     families: [
-      { name: 'Space Grotesk', provider: 'google', weights: ['500', '600', '700'] },
+      { name: 'Fraunces', provider: 'google', weights: ['500', '600'], styles: ['normal', 'italic'] },
       { name: 'Inter', provider: 'google', weights: ['400', '500', '600'] },
-      { name: 'JetBrains Mono', provider: 'google', weights: ['400', '500'] },
+      { name: 'JetBrains Mono', provider: 'google', weights: ['400', '500', '600'] },
     ],
   },
 })

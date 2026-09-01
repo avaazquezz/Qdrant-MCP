@@ -4,15 +4,16 @@ export default <Partial<Config>>{
   theme: {
     extend: {
       colors: {
-        bg: '#0A0A0F',
-        surface: '#12131A',
-        border: '#23242E',
-        'text-primary': '#F2F2F5',
-        'text-secondary': '#9497A6',
-        accent: { DEFAULT: '#6D5EF5', hover: '#8477FF' },
+        ink: '#08090D',
+        graphite: '#14151C',
+        hairline: '#26272F',
+        paper: '#ECECEF',
+        dust: '#85889A',
+        signal: { DEFAULT: '#7C6CFF', hover: '#9284FF' },
+        pulse: '#34E2C4',
       },
       fontFamily: {
-        heading: ['Space Grotesk', 'sans-serif'],
+        display: ['Fraunces', 'serif'],
         body: ['Inter', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
