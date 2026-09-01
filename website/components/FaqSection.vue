@@ -38,17 +38,18 @@ function toggle(i: number) {
 </script>
 
 <template>
-  <section class="mx-auto max-w-3xl px-6 py-20">
-    <h2 class="font-heading text-2xl font-semibold text-text-primary">FAQ</h2>
-    <div class="mt-8 divide-y divide-border border-y border-border">
+  <section class="mx-auto max-w-3xl px-6 py-24">
+    <p class="font-mono text-xs uppercase tracking-[0.25em] text-dust/70">and if —</p>
+    <h2 class="mt-4 font-display text-3xl italic text-paper">FAQ</h2>
+    <div class="mt-8 divide-y divide-hairline border-y border-hairline">
       <div v-for="(item, i) in items" :key="item.q" class="py-4">
         <button
           type="button"
-          class="flex w-full items-center justify-between text-left font-heading text-base text-text-primary"
+          class="flex w-full items-center justify-between text-left text-base text-paper"
           @click="toggle(i)"
         >
           <span>{{ item.q }}</span>
-          <span class="ml-4 text-text-secondary">{{ item.open ? '−' : '+' }}</span>
+          <span class="ml-4 font-mono text-dust">{{ item.open ? '−' : '+' }}</span>
         </button>
         <Transition
           enter-active-class="transition-all duration-200 ease-out"
@@ -58,7 +59,7 @@ function toggle(i: number) {
           leave-from-class="opacity-100 max-h-40"
           leave-to-class="opacity-0 max-h-0"
         >
-          <p v-if="item.open" class="mt-2 overflow-hidden text-sm text-text-secondary">{{ item.a }}</p>
+          <p v-if="item.open" class="mt-2 overflow-hidden text-sm text-dust">{{ item.a }}</p>
         </Transition>
       </div>
     </div>

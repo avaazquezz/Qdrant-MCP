@@ -13,7 +13,7 @@ useHead({
 </script>
 
 <template>
-  <main class="min-h-screen bg-bg">
+  <main class="min-h-screen bg-ink">
     <HeroSection />
     <TrustBar />
     <ComparisonSection />

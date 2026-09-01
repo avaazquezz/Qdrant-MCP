@@ -15,21 +15,22 @@ useReveal(root, () => {
 </script>
 
 <template>
-  <section ref="root" class="mx-auto max-w-3xl px-6 py-24 text-center">
+  <section ref="root" class="mx-auto max-w-3xl px-6 py-28 text-center">
     <div class="cta-final-inner">
-      <h2 class="font-heading text-3xl font-bold text-text-primary">
-        Point your MCP client at your Qdrant. Get the whole API.
+      <p class="font-mono text-xs uppercase tracking-[0.25em] text-dust/70">nearest neighbor: you</p>
+      <h2 class="mt-4 font-display text-4xl italic text-paper">
+        Point your MCP client at your Qdrant.
       </h2>
       <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
-        <div class="flex items-center gap-2 rounded-md border border-border bg-surface px-4 py-2">
-          <code class="font-mono text-sm text-text-primary">uvx mcp-qdrant</code>
+        <div class="flex items-center gap-2 border border-hairline bg-graphite px-4 py-2">
+          <code class="font-mono text-sm text-paper">uvx mcp-qdrant</code>
           <UiCopyButton text="uvx mcp-qdrant" />
         </div>
         <a
           href="https://github.com/avaazquezz/Qdrant-MCP"
           target="_blank"
           rel="noopener"
-          class="rounded-md border border-border px-4 py-2 text-sm text-text-primary transition-colors hover:border-accent"
+          class="border border-hairline px-4 py-2 font-mono text-sm text-paper transition-colors hover:border-signal"
         >
           View on GitHub
         </a>
