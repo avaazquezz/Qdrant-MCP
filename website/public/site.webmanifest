@@ -1,0 +1,8 @@
+{
+  "name": "Qdrant MCP",
+  "short_name": "mcp-qdrant",
+  "theme_color": "#F2EFE7",
+  "background_color": "#F2EFE7",
+  "display": "browser",
+  "icons": []
+}

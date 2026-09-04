@@ -1,73 +1,87 @@
 <script setup lang="ts">
-import gsap from 'gsap'
-import tools from '~/data/tools.generated.json'
+import { ref } from 'vue'
 
-const toolCount = tools.length
-const root = ref<HTMLElement | null>(null)
-
-useReveal(root, () => {
-  gsap.utils.toArray<HTMLElement>('.reveal').forEach((el) => {
-    gsap.from(el, {
-      y: 16,
-      opacity: 0,
-      duration: 0.5,
-      ease: 'power2.out',
-      scrollTrigger: { trigger: el, start: 'top 80%', once: true },
-    })
-  })
-
-  const countEl = root.value?.querySelector<HTMLElement>('.tool-count')
-  if (countEl) {
-    const counter = { val: 0 }
-    countEl.textContent = '0'
-    gsap.to(counter, {
-      val: toolCount,
-      duration: 1.4,
-      ease: 'power1.out',
-      snap: { val: 1 },
-      scrollTrigger: { trigger: countEl, start: 'top 85%', once: true },
-      onUpdate: () => (countEl.textContent = String(Math.round(counter.val))),
-    })
-  }
-})
+const active = ref<'mine' | 'official'>('mine')
 </script>
 
 <template>
-  <section ref="root" class="mx-auto max-w-4xl px-6 py-24">
-    <p class="reveal font-mono text-xs uppercase tracking-[0.25em] text-dust/70">the surface</p>
+  <section id="s-02" data-section="02" class="border-t-2 border-ink py-14 lg:py-24">
+    <div class="section-rule border-t-2 border-ink" />
+    <h2 class="mt-8 max-w-prose text-h2 text-ink">Two servers, same database. The difference is one box.</h2>
+    <p class="mt-4 max-w-prose text-deck text-graphite">
+      Both talk to the same Qdrant over the same HTTP API. Where they differ is what happens
+      between your client and the SDK call.
+    </p>
 
-    <div class="reveal mt-4 flex flex-wrap items-end gap-x-6 gap-y-2">
-      <span class="font-mono text-sm text-dust/60 line-through decoration-hairline">
-        official qdrant-mcp-server · 2 tools
-      </span>
+    <div role="radiogroup" aria-label="Which server to diagram" class="mt-8 inline-flex border border-ink">
+      <label
+        class="flex h-10 cursor-pointer items-center px-4 text-ui transition-colors"
+        :class="active === 'mine' ? 'bg-ink text-paper' : 'bg-paper text-ink hover:bg-tint'"
+      >
+        <input type="radio" name="wiring" value="mine" v-model="active" class="sr-only" />
+        mcp-qdrant
+      </label>
+      <label
+        class="flex h-10 cursor-pointer items-center border-l border-ink px-4 text-ui transition-colors"
+        :class="active === 'official' ? 'bg-ink text-paper' : 'bg-paper text-ink hover:bg-tint'"
+      >
+        <input type="radio" name="wiring" value="official" v-model="active" class="sr-only" />
+        qdrant/mcp-server-qdrant
+      </label>
     </div>
 
-    <div class="reveal mt-2 flex flex-col gap-8 sm:flex-row sm:items-center">
-      <p class="tool-count font-display text-7xl italic text-paper sm:text-8xl">{{ toolCount }}</p>
-      <div class="max-w-sm">
-        <p class="font-mono text-sm uppercase tracking-[0.15em] text-pulse">tools, not two</p>
-        <p class="mt-2 text-sm leading-relaxed text-dust">
-          Every collection, point, search, payload, snapshot, and observability operation Qdrant
-          exposes. You bring your own vectors — it never embeds anything for you.
-        </p>
-      </div>
-      <div class="hidden h-32 flex-1 sm:block">
-        <VectorField :animated="false" />
-      </div>
+    <div class="mt-8">
+      <WiringDiagram :active="active" />
     </div>
 
-    <div class="reveal mt-16 border-t border-hairline pt-6">
-      <p class="flex flex-wrap items-center gap-3 font-mono text-sm text-dust">
-        <span class="text-paper">your llm client</span>
-        <span class="text-hairline">──▶</span>
-        <span class="border border-signal/40 px-2 py-0.5 text-signal">qdrant mcp — thin wrapper</span>
-        <span class="text-hairline">──▶</span>
-        <span class="text-paper">your qdrant</span>
+    <div class="mt-10 max-w-prose border-t border-ink pt-8">
+      <h3 class="text-h3 text-ink">If store and find are all you need, use theirs.</h3>
+      <p class="mt-3 text-body text-ink">
+        The official server embeds your documents for you, which means it works with no embedding
+        pipeline of your own, and two tool descriptions cost almost nothing in a context window. It
+        is maintained by Qdrant. Everything on this page assumes the opposite trade: that you
+        already have an embedding step you control, and you want the rest of Qdrant's API next to
+        it.
       </p>
-      <p class="mt-4 max-w-xl text-sm leading-relaxed text-dust">
-        No embeddings generated, no chunking, no vector opinions — it's not a RAG system, on
-        purpose. Whatever your client wants to store or query, it brings its own vectors.
+      <p class="mt-3 text-micro text-graphite">
+        Two tools counted against
+        <a
+          href="https://github.com/qdrant/mcp-server-qdrant"
+          target="_blank"
+          rel="noopener"
+          class="font-mono underline decoration-1 underline-offset-4"
+        >qdrant/mcp-server-qdrant<span class="sr-only"> (opens in a new tab)</span></a>
+        on 4 September 2026.
       </p>
+    </div>
+
+    <div class="mt-10 overflow-x-auto">
+      <table class="w-full min-w-[560px] border-collapse text-ui">
+        <caption class="sr-only">Feature comparison between qdrant/mcp-server-qdrant and mcp-qdrant</caption>
+        <thead>
+          <tr class="border-b border-ink">
+            <th scope="col" class="py-2 pr-4 text-left font-normal text-graphite"></th>
+            <th scope="col" class="py-2 pr-4 text-left font-mono font-normal text-ink">qdrant/mcp-server-qdrant</th>
+            <th scope="col" class="py-2 text-left font-mono font-normal text-ink">mcp-qdrant</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(row, i) in [
+            ['tools registered', '2', '49, of which 13 by default'],
+            ['generates embeddings', 'yes, with fastembed', 'no'],
+            ['collection management', 'no', '6 tools'],
+            ['search beyond plain kNN', 'no', '9 tools'],
+            ['payload and index editing', 'no', '12 tools'],
+            ['snapshots and restore', 'no', '9 tools'],
+            ['server observability', 'no', '6 tools'],
+            ['maintained by', 'Qdrant', 'independent, MIT'],
+          ]" :key="row[0]" class="border-b border-ink" :class="i % 2 === 1 ? 'bg-tint' : ''">
+            <th scope="row" class="py-2 pr-4 text-left font-normal text-graphite">{{ row[0] }}</th>
+            <td class="py-2 pr-4 text-ink">{{ row[1] }}</td>
+            <td class="py-2 text-ink">{{ row[2] }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 </template>

@@ -2,10 +2,77 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-ink text-paper font-body antialiased;
+html {
+  color-scheme: light;
+  /* Backstop, not a fix for a known element: at the very narrowest widths,
+     cumulative sub-pixel rounding across many flex/grid rows can leave the
+     page 2-5px horizontally scrollable with no single element visibly
+     overflowing. Nothing at the page level is meant to scroll sideways —
+     the deliberately scrollable containers (code plates, the mobile
+     section row) keep their own overflow-x: auto regardless. Set on html,
+     not body — giving body its own overflow turns it into a new scroll
+     container and breaks position: sticky relative to the viewport. */
+  overflow-x: hidden;
 }
 
+body {
+  @apply bg-paper text-ink font-sans antialiased;
+}
+
+/* spot has exactly one meaning on this page: this writes to your data, or
+   this is a live value. It is never used for anything decorative. */
 ::selection {
-  @apply bg-signal/30 text-paper;
+  @apply bg-ink text-paper;
+}
+
+/* Every interactive element gets a designed, visible ring — no control on
+   this page relies on the browser default. Sections on the ink ground
+   (ColophonSection, .on-ink) flip the ring to paper so it stays visible. */
+:focus-visible {
+  outline: 2px solid theme('colors.spot');
+  outline-offset: 2px;
+}
+.on-ink :focus-visible {
+  outline-color: theme('colors.paper');
+}
+
+/* Structural motion vocabulary — CSS only, no animation library. Both
+   keyframes are written "backwards": the finished, correct state is the
+   element's default appearance, and the keyframe only describes how it
+   arrived. That is what lets prefers-reduced-motion simply not apply the
+   animation at all (below) without any element ever being hidden in
+   markup, waiting on JS, or breaking under a blocked stylesheet. */
+@keyframes draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes stamp {
+  from {
+    transform: scale(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .anim-draw {
+    transform-origin: left;
+    animation: draw 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .anim-stamp {
+    animation: stamp 220ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  }
+}
+
+/* The net: whatever a component author forgets, this is the floor. Under
+   reduced motion every animation and transition collapses to effectively
+   nothing, everywhere, with no per-component opt-in to remember. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

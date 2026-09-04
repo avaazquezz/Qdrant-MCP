@@ -1,65 +1,67 @@
 <script setup lang="ts">
-import gsap from 'gsap'
+import { defaultConfigJson } from '~/composables/useToolsets'
 
-const root = ref<HTMLElement | null>(null)
-
-useReveal(root, () => {
-  gsap
-    .timeline({ defaults: { ease: 'power2.out' } })
-    .from('.hero-eyebrow', { y: 16, opacity: 0, duration: 0.5 })
-    .from(
-      '.hero-wordmark',
-      { y: 40, opacity: 0, filter: 'blur(16px)', scale: 1.04, duration: 1 },
-      '-=0.25'
-    )
-    .from('.hero-subtitle', { y: 20, opacity: 0, duration: 0.6 }, '-=0.5')
-    .from('.hero-cta-row > *', { y: 16, opacity: 0, duration: 0.5, stagger: 0.08 }, '-=0.3')
-    .from('.hero-corner', { opacity: 0, duration: 0.6, stagger: 0.08 }, '-=1')
-})
+const config = defaultConfigJson()
 </script>
 
 <template>
-  <section ref="root" class="relative overflow-hidden border-b border-hairline">
-    <div class="pointer-events-none absolute inset-0 opacity-[0.35]">
-      <VectorField parallax />
-    </div>
-    <div
-      class="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink via-ink/60 to-ink"
-    />
+  <section id="s-01" data-section="01" class="flex min-h-[max(720px,100svh)] flex-col justify-center pb-12 pt-8 lg:pt-12">
+    <div class="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-8">
+      <div class="min-w-0 lg:col-span-6">
+        <h1 class="text-display text-ink">
+          Qdrant's API as
+          <br />
+          <span class="text-spot">49</span> MCP tools.
+          <br />
+          No embedding step.
+        </h1>
 
-    <span class="hero-corner pointer-events-none absolute left-6 top-6 font-mono text-[10px] text-dust/50 sm:left-10 sm:top-10">+</span>
-    <span class="hero-corner pointer-events-none absolute right-6 top-6 font-mono text-[10px] text-dust/50 sm:right-10 sm:top-10">+</span>
-    <span class="hero-corner pointer-events-none absolute bottom-6 left-6 font-mono text-[10px] text-dust/50 sm:bottom-10 sm:left-10">+</span>
-    <span class="hero-corner pointer-events-none absolute bottom-6 right-6 font-mono text-[10px] text-dust/50 sm:bottom-10 sm:right-10">+</span>
+        <p class="mt-6 max-w-prose text-deck text-graphite">
+          The official server hands your client two tools, <code class="font-mono">qdrant-store</code>
+          and <code class="font-mono">qdrant-find</code>, and runs your documents through its own
+          embedding model. This one registers a tool per Qdrant operation and never touches your
+          vectors.
+        </p>
 
-    <div class="relative mx-auto max-w-4xl px-6 pb-28 pt-36 text-center sm:pt-48">
-      <p class="hero-eyebrow font-mono text-xs uppercase tracking-[0.25em] text-pulse">
-        model context protocol · vector search
-      </p>
-      <h1
-        class="hero-wordmark mt-6 font-display text-6xl italic tracking-tight text-paper sm:text-7xl"
-      >
-        Qdrant MCP
-      </h1>
-      <p class="hero-subtitle mx-auto mt-6 max-w-xl text-lg leading-relaxed text-dust">
-        The full Qdrant API as MCP tools — collections, every search mode, payload,
-        snapshots, observability. Not just
-        <code class="font-mono text-paper">store</code>/<code class="font-mono text-paper">find</code>.
-      </p>
-      <div class="hero-cta-row mt-10 flex flex-wrap items-center justify-center gap-4">
-        <div class="flex items-center gap-2 border border-hairline bg-graphite px-4 py-2">
-          <code class="font-mono text-sm text-paper">uvx mcp-qdrant</code>
-          <UiCopyButton text="uvx mcp-qdrant" />
+        <div class="mt-8 flex flex-wrap items-center gap-4">
+          <UiCopyButton :text="config" label="Copy the config" variant="primary" />
+          <a
+            href="https://github.com/avaazquezz/Qdrant-MCP"
+            target="_blank"
+            rel="noopener"
+            class="flex h-11 items-center rounded-sm border border-ink px-4 text-ui text-ink transition-colors hover:bg-ink hover:text-paper"
+          >Read the source<span class="sr-only"> (opens in a new tab)</span></a>
         </div>
-        <a
-          href="https://github.com/avaazquezz/Qdrant-MCP"
-          target="_blank"
-          rel="noopener"
-          class="font-mono text-sm text-dust underline decoration-hairline underline-offset-4 transition-colors hover:text-paper"
-        >
-          View on GitHub →
-        </a>
+
+        <table class="mt-10 w-full max-w-prose border-collapse border-t border-ink text-ui">
+          <caption class="sr-only">Requirements and defaults</caption>
+          <tbody>
+            <tr class="border-b border-ink">
+              <th scope="row" class="w-40 py-2 pr-4 text-left font-normal text-graphite">requires</th>
+              <td class="py-2 text-ink">Qdrant server v1.19.0 or newer</td>
+            </tr>
+            <tr class="border-b border-ink">
+              <th scope="row" class="w-40 py-2 pr-4 text-left font-normal text-graphite">runtime</th>
+              <td class="py-2 text-ink">Python 3.12 or newer</td>
+            </tr>
+            <tr class="border-b border-ink">
+              <th scope="row" class="w-40 py-2 pr-4 text-left font-normal text-graphite">default set</th>
+              <td class="py-2 text-ink"><span class="font-mono">core</span>, 13 of the 49 tools</td>
+            </tr>
+            <tr class="border-b border-ink">
+              <th scope="row" class="w-40 py-2 pr-4 text-left font-normal text-graphite">licence</th>
+              <td class="py-2 text-ink">MIT. On PyPI as <span class="font-mono">mcp-qdrant</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="min-w-0 lg:col-span-6">
+        <h2 class="sr-only">All 49 tool names</h2>
+        <ToolWall />
       </div>
     </div>
+
+    <div class="section-rule mt-10 border-t-2 border-ink" />
   </section>
 </template>
