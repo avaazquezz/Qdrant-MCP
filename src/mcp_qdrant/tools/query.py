@@ -14,6 +14,7 @@ from mcp_qdrant.tools.query_shared import (
     FusionName,
     LookupFromInput,
     PrefetchInput,
+    VectorOrId,
     build_lookup_from,
     build_prefetch_list,
     build_query_value,
@@ -32,7 +33,7 @@ _QUERY_ANNOTATIONS = ToolAnnotations(
 def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_query(
         collection_name: str,
-        query_vector: Annotated[list[float], Field(min_length=1)] | int | str | None = None,
+        query_vector: VectorOrId | None = None,
         fusion: FusionName | None = None,
         prefetch: list[PrefetchInput] | None = None,
         using: str | None = None,
@@ -45,12 +46,15 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         """Vector similarity search, with optional hybrid search over
         multiple prefetch stages.
 
-        Pass `query_vector` (a literal vector, or a point id to reuse an
-        existing point's vector) for a plain nearest-vector query, or
-        `fusion` + 2+ `prefetch` stages to combine multiple retrieval
-        strategies via Reciprocal Rank Fusion (`fusion="rrf"`) or
-        Distribution-Based Score Fusion (`fusion="dbsf"`) — exactly one of
-        `query_vector`/`fusion` is required. `using` selects a named vector;
+        Pass `query_vector` for a plain nearest-vector query — a dense
+        vector, a multivector (list of vectors), a sparse vector
+        (`{"indices": [...], "values": [...]}`), or a point id to reuse an
+        existing point's vector; it must match the vector selected with
+        `using`. Or pass `fusion` + 2+ `prefetch` stages to combine
+        multiple retrieval strategies via Reciprocal Rank Fusion
+        (`fusion="rrf"`) or Distribution-Based Score Fusion
+        (`fusion="dbsf"`) — exactly one of `query_vector`/`fusion` is
+        required. `using` selects a named vector;
         `lookup_from` resolves `query_vector` from a point id in another
         collection instead of the current one. Fails with a clear error if
         the collection doesn't exist.
@@ -59,7 +63,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             "limit": 5}
         Example (hybrid): {"collection_name": "docs", "fusion": "rrf", "prefetch": [
             {"query_vector": [0.1, 0.2, 0.3, 0.4], "using": "dense", "limit": 20},
-            {"query_vector": [0.5, 0.5], "using": "sparse", "limit": 20}
+            {"query_vector": {"indices": [1, 7], "values": [0.5, 0.2]}, "using": "sparse",
+                "limit": 20}
         ], "limit": 5}
         """
         query = build_query_value(query_vector, fusion)

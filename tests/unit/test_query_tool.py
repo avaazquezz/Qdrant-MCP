@@ -18,6 +18,7 @@ from qdrant_client.http.models import (
     LookupLocation,
     QueryResponse,
     ScoredPoint,
+    SparseVector,
 )
 
 from mcp_qdrant.tools import query as query_tools
@@ -78,7 +79,11 @@ async def test_query_hybrid_fusion_builds_fusion_query_with_prefetch() -> None:
             "fusion": "rrf",
             "prefetch": [
                 {"query_vector": [0.1, 0.2, 0.3, 0.4], "using": "dense", "limit": 20},
-                {"query_vector": [0.5, 0.5], "using": "sparse", "limit": 20},
+                {
+                    "query_vector": {"indices": [1, 7], "values": [0.5, 0.2]},
+                    "using": "sparse",
+                    "limit": 20,
+                },
             ],
             "limit": 5,
         },
@@ -91,6 +96,49 @@ async def test_query_hybrid_fusion_builds_fusion_query_with_prefetch() -> None:
     assert kwargs["query"].fusion == Fusion.RRF
     assert kwargs["prefetch"] is not None
     assert [p.using for p in kwargs["prefetch"]] == ["dense", "sparse"]
+    assert kwargs["prefetch"][1].query == SparseVector(indices=[1, 7], values=[0.5, 0.2])
+
+
+async def test_query_accepts_sparse_vector_literal() -> None:
+    mock = AsyncMock()
+    mock.query_points.return_value = QueryResponse(points=[])
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool(
+        "qdrant_query",
+        {
+            "collection_name": "docs",
+            "query_vector": {"indices": [1, 7], "values": [0.5, 0.2]},
+            "using": "sparse",
+        },
+    )
+
+    _, kwargs = mock.query_points.call_args
+    assert kwargs["query"] == SparseVector(indices=[1, 7], values=[0.5, 0.2])
+
+
+async def test_query_accepts_multivector_literal() -> None:
+    mock = AsyncMock()
+    mock.query_points.return_value = QueryResponse(points=[])
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool(
+        "qdrant_query",
+        {"collection_name": "docs", "query_vector": [[1.0, 0.0], [0.0, 1.0]], "using": "colbert"},
+    )
+
+    _, kwargs = mock.query_points.call_args
+    assert kwargs["query"] == [[1.0, 0.0], [0.0, 1.0]]
+
+
+@pytest.mark.parametrize("empty", [[], [[]]])
+async def test_query_rejects_empty_dense_or_multivector(empty: list[object]) -> None:
+    mock = AsyncMock()
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    with pytest.raises(ToolError):
+        await server.call_tool("qdrant_query", {"collection_name": "docs", "query_vector": empty})
+    mock.query_points.assert_not_awaited()
 
 
 async def test_query_using_and_lookup_from_are_forwarded() -> None:

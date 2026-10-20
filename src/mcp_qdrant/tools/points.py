@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 
 from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
@@ -12,11 +12,13 @@ from qdrant_client.http.models import (
     Filter,
     PointStruct,
     Record,
+    UpdateMode,
     UpdateResult,
+    VectorStruct,
 )
 
 from mcp_qdrant.tools.errors import call_qdrant
-from mcp_qdrant.tools.points_shared import build_points_selector
+from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector
 from mcp_qdrant.tools.registry import ToolRegistry
 
 _UPSERT_ANNOTATIONS = ToolAnnotations(
@@ -59,13 +61,11 @@ _COUNT_ANNOTATIONS = ToolAnnotations(
 
 
 class PointInput(BaseModel):
-    """A point to upsert: a plain id + vector + payload — never `Document`,
-    `Image`, or `InferenceObject` (qdrant-client's server-side embedding
-    inference variants), which would contradict this server's principle of
-    never generating embeddings itself."""
+    """A point to upsert: id + vector(s) + payload. See `PointVectorValue`
+    for the accepted vector shapes."""
 
     id: int | str
-    vector: list[float]
+    vector: PointVectorValue
     payload: dict[str, Any] | None = None
 
 
@@ -80,18 +80,53 @@ class PointsScrollResult(BaseModel):
 
 def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_points_upsert(
-        collection_name: str, points: Annotated[list[PointInput], Field(min_length=1)]
+        collection_name: str,
+        points: Annotated[list[PointInput], Field(min_length=1)],
+        wait: bool = True,
+        update_mode: Literal["upsert", "insert_only", "update_only"] | None = None,
+        update_filter: Filter | None = None,
     ) -> UpdateResult:
         """Insert or replace points (id + vector + payload) in a collection.
+
+        `vector` matches the collection's vector config: a plain list for a
+        single unnamed vector; a list of lists for an unnamed multivector;
+        or a dict keyed by vector name for named vectors, where each value
+        is a dense list, a multivector, or a sparse vector
+        (`{"indices": [...], "values": [...]}`).
+
+        `update_mode` makes the write conditional: `insert_only` never
+        overwrites an existing id, `update_only` never creates a new one
+        (default `upsert` does both). `update_filter` only overwrites existing
+        points whose current payload matches the filter. `wait=false`
+        returns before the write is applied.
 
         Fails with a clear error if the collection doesn't exist.
 
         Example: {"collection_name": "docs", "points": [
             {"id": 1, "vector": [0.1, 0.2, 0.3, 0.4], "payload": {"city": "ny"}}
         ]}
+        Example (named dense + sparse): {"collection_name": "docs", "points": [
+            {"id": 1, "vector": {"dense": [0.1, 0.2, 0.3, 0.4],
+                "sparse": {"indices": [1, 7], "values": [0.5, 0.2]}}}
+        ]}
         """
-        structs = [PointStruct(id=p.id, vector=p.vector, payload=p.payload) for p in points]
-        return await call_qdrant(lambda: client.upsert(collection_name, points=structs))
+        # PointInput.vector is a narrower union than PointStruct.vector (excludes
+        # Document/Image/InferenceObject); dict value types are invariant in mypy,
+        # so a plain assignment doesn't widen it.
+        structs = [
+            PointStruct(id=p.id, vector=cast(VectorStruct, p.vector), payload=p.payload)
+            for p in points
+        ]
+        mode = UpdateMode(update_mode) if update_mode is not None else None
+        return await call_qdrant(
+            lambda: client.upsert(
+                collection_name,
+                points=structs,
+                wait=wait,
+                update_mode=mode,
+                update_filter=update_filter,
+            )
+        )
 
     async def qdrant_points_get(
         collection_name: str,

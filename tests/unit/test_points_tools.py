@@ -12,7 +12,17 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
-from qdrant_client.http.models import CountResult, Record, UpdateResult, UpdateStatus
+from qdrant_client.http.models import (
+    CountResult,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    Record,
+    SparseVector,
+    UpdateMode,
+    UpdateResult,
+    UpdateStatus,
+)
 
 from mcp_qdrant.tools import points as points_tools
 from mcp_qdrant.tools.points import PointsGetResult, PointsScrollResult
@@ -63,6 +73,107 @@ async def test_points_upsert_missing_collection_raises_tool_error() -> None:
             "qdrant_points_upsert",
             {"collection_name": "docs", "points": [{"id": 1, "vector": [0.1, 0.2]}]},
         )
+
+
+async def test_points_upsert_accepts_named_dense_sparse_and_multivector() -> None:
+    mock = AsyncMock()
+    mock.upsert.return_value = UpdateResult(operation_id=1, status=UpdateStatus.COMPLETED)
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    result = await server.call_tool(
+        "qdrant_points_upsert",
+        {
+            "collection_name": "docs",
+            "points": [
+                {
+                    "id": 1,
+                    "vector": {
+                        "dense": [0.1, 0.2, 0.3, 0.4],
+                        "sparse": {"indices": [1, 7], "values": [0.5, 0.2]},
+                        "colbert": [[1.0, 0.0], [0.0, 1.0]],
+                    },
+                }
+            ],
+        },
+    )
+    assert isinstance(result, CallToolResult)
+    assert result.is_error is False
+
+    _, kwargs = mock.upsert.call_args
+    vector = kwargs["points"][0].vector
+    assert vector["dense"] == [0.1, 0.2, 0.3, 0.4]
+    assert vector["sparse"] == SparseVector(indices=[1, 7], values=[0.5, 0.2])
+    assert vector["colbert"] == [[1.0, 0.0], [0.0, 1.0]]
+
+
+async def test_points_upsert_accepts_unnamed_multivector() -> None:
+    mock = AsyncMock()
+    mock.upsert.return_value = UpdateResult(operation_id=1, status=UpdateStatus.COMPLETED)
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool(
+        "qdrant_points_upsert",
+        {"collection_name": "docs", "points": [{"id": 1, "vector": [[1.0, 0.0], [0.0, 1.0]]}]},
+    )
+
+    _, kwargs = mock.upsert.call_args
+    assert kwargs["points"][0].vector == [[1.0, 0.0], [0.0, 1.0]]
+
+
+async def test_points_upsert_forwards_write_options() -> None:
+    mock = AsyncMock()
+    mock.upsert.return_value = UpdateResult(operation_id=1, status=UpdateStatus.COMPLETED)
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool(
+        "qdrant_points_upsert",
+        {
+            "collection_name": "docs",
+            "points": [{"id": 1, "vector": [0.1, 0.2]}],
+            "wait": False,
+            "update_mode": "insert_only",
+            "update_filter": {"must": [{"key": "city", "match": {"value": "ny"}}]},
+        },
+    )
+
+    _, kwargs = mock.upsert.call_args
+    assert kwargs["wait"] is False
+    assert kwargs["update_mode"] == UpdateMode.INSERT_ONLY
+    assert kwargs["update_filter"] == Filter(
+        must=[FieldCondition(key="city", match=MatchValue(value="ny"))]
+    )
+
+
+async def test_points_upsert_defaults_are_unconditional_and_waiting() -> None:
+    mock = AsyncMock()
+    mock.upsert.return_value = UpdateResult(operation_id=1, status=UpdateStatus.COMPLETED)
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool(
+        "qdrant_points_upsert",
+        {"collection_name": "docs", "points": [{"id": 1, "vector": [0.1, 0.2]}]},
+    )
+
+    _, kwargs = mock.upsert.call_args
+    assert kwargs["wait"] is True
+    assert kwargs["update_mode"] is None
+    assert kwargs["update_filter"] is None
+
+
+async def test_points_upsert_rejects_unknown_update_mode() -> None:
+    mock = AsyncMock()
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    with pytest.raises(ToolError):
+        await server.call_tool(
+            "qdrant_points_upsert",
+            {
+                "collection_name": "docs",
+                "points": [{"id": 1, "vector": [0.1, 0.2]}],
+                "update_mode": "merge",
+            },
+        )
+    mock.upsert.assert_not_awaited()
 
 
 async def test_points_get_returns_records() -> None:
