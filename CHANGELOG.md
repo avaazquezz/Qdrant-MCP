@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-10-20
+
+Fase 12 — the `admin` toolset stops being an empty reserved name. Everything below was verified
+hands-on against a single-node Qdrant `v1.19.0`; shard keys and resharding, which genuinely need
+a distributed deployment, remain out of scope.
+
+### Added
+- `qdrant_alias_list`, `qdrant_collection_aliases`, `qdrant_alias_update` (toolset `admin`).
+  Aliases are accepted by Qdrant anywhere a collection name is, so switching what a name points
+  to is a zero-downtime reindex. `qdrant_alias_update` takes `create_alias` / `rename_alias` /
+  `delete_alias` operations; a `create_alias` on an existing alias name re-points it. Operations
+  in one call are **not** rolled back as a group if a later one fails — documented in the tool
+  and pinned by an integration test.
+- `qdrant_collection_cluster_info` (toolset `admin`): shard count and per-shard point count and
+  replica state; works on a single node.
+- `qdrant_collection_optimizations` (toolset `admin`): optimizer summary and running
+  optimizations, plus optional `queued` / `completed` / `idle_segments` detail via `include`. It
+  uses the low-level REST layer because `AsyncQdrantClient.get_optimizations` drops the selector
+  for those lists.
+- `qdrant_collection_create`: `hnsw_config`, `optimizers_config` and `on_disk_payload`
+  (the latter can only be chosen at creation).
+
+### Changed
+- `QDRANT_MCP_TOOLSETS=admin` now registers 5 tools instead of none.
+
 ## [2.1.0] - 2026-10-20
 
 Fase 11 — sparse and multivector vectors work end to end. Both gaps below were verified

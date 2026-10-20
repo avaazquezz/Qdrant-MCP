@@ -19,6 +19,8 @@ from qdrant_client.http.models import (
     CollectionInfo,
     CollectionsResponse,
     Disabled,
+    HnswConfigDiff,
+    OptimizersConfigDiff,
 )
 
 from mcp_qdrant.tools import collections as collections_tools
@@ -59,6 +61,49 @@ async def test_collection_create_returns_collection_info(
     assert payload.points_count == 0
     mock.create_collection.assert_awaited_once()
     mock.get_collection.assert_awaited_once_with("docs")
+
+
+async def test_collection_create_forwards_hnsw_optimizers_and_on_disk_payload(
+    make_collection_info: Callable[..., CollectionInfo],
+) -> None:
+    mock = AsyncMock()
+    mock.create_collection.return_value = True
+    mock.get_collection.return_value = make_collection_info(points_count=0)
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool(
+        "qdrant_collection_create",
+        {
+            "collection_name": "docs",
+            "vector_size": 4,
+            "hnsw_config": {"m": 0, "payload_m": 16},
+            "optimizers_config": {"indexing_threshold": 5000},
+            "on_disk_payload": True,
+        },
+    )
+
+    _, kwargs = mock.create_collection.call_args
+    assert kwargs["hnsw_config"] == HnswConfigDiff(m=0, payload_m=16)
+    assert kwargs["optimizers_config"] == OptimizersConfigDiff(indexing_threshold=5000)
+    assert kwargs["on_disk_payload"] is True
+
+
+async def test_collection_create_leaves_creation_options_unset_by_default(
+    make_collection_info: Callable[..., CollectionInfo],
+) -> None:
+    mock = AsyncMock()
+    mock.create_collection.return_value = True
+    mock.get_collection.return_value = make_collection_info(points_count=0)
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool(
+        "qdrant_collection_create", {"collection_name": "docs", "vector_size": 4}
+    )
+
+    _, kwargs = mock.create_collection.call_args
+    assert kwargs["hnsw_config"] is None
+    assert kwargs["optimizers_config"] is None
+    assert kwargs["on_disk_payload"] is None
 
 
 async def test_collection_create_duplicate_raises_tool_error_with_real_message() -> None:

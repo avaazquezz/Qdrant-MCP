@@ -23,3 +23,15 @@ async def test_build_server_respects_disabled_toolsets() -> None:
     assert "qdrant_query" not in names
     assert "qdrant_query_batch" in names
     assert len(tools) == 9
+
+
+async def test_build_server_registers_the_admin_toolset_when_enabled() -> None:
+    server = build_server(Settings.from_env({"QDRANT_MCP_TOOLSETS": "admin"}))
+    names = {t.name for t in await server.list_tools()}
+    assert names == {
+        "qdrant_alias_list",
+        "qdrant_collection_aliases",
+        "qdrant_alias_update",
+        "qdrant_collection_cluster_info",
+        "qdrant_collection_optimizations",
+    }
