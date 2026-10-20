@@ -34,4 +34,6 @@ async def test_build_server_registers_the_admin_toolset_when_enabled() -> None:
         "qdrant_alias_update",
         "qdrant_collection_cluster_info",
         "qdrant_collection_optimizations",
+        "qdrant_collection_copy",
+        "qdrant_payload_schema_infer",
     }

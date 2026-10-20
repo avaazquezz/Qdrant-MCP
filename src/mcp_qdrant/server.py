@@ -12,6 +12,7 @@ from mcp_qdrant.config import Settings
 from mcp_qdrant.qdrant_client import build_qdrant_client
 from mcp_qdrant.tools import admin as admin_tools
 from mcp_qdrant.tools import collections as collections_tools
+from mcp_qdrant.tools import composites as composites_tools
 from mcp_qdrant.tools import core as core_tools
 from mcp_qdrant.tools import observability as observability_tools
 from mcp_qdrant.tools import payload as payload_tools
@@ -26,11 +27,11 @@ SERVER_NAME = "mcp-qdrant"
 
 # One entry per tool module; collections/points/query register under the
 # "core" toolset (Fase 1), search under "search" (Fase 2), payload/vectors
-# under "payload" (Fase 3), admin under "admin" (Fase 12; distributed-cluster
-# administration stays out of scope, see Fase 5). `snapshots_tools` (Fase 4)
-# and `observability_tools` (Fase 6) are wired up separately below: they're
-# the only modules whose `register()` also needs the configured QDRANT_URL,
-# to build download/metrics URLs.
+# under "payload" (Fase 3), admin/composites under "admin" (Fases 12-13;
+# distributed-cluster administration stays out of scope, see Fase 5).
+# `snapshots_tools` (Fase 4) and `observability_tools` (Fase 6) are wired up
+# separately below: they're the only modules whose `register()` also needs the
+# configured QDRANT_URL, to build download/metrics URLs.
 _TOOL_MODULES = (
     core_tools,
     collections_tools,
@@ -40,6 +41,7 @@ _TOOL_MODULES = (
     payload_tools,
     vectors_tools,
     admin_tools,
+    composites_tools,
 )
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 from unittest.mock import AsyncMock
+from uuid import UUID
 
 import httpx
 import pytest
@@ -26,6 +27,7 @@ from qdrant_client.http.models import (
 
 from mcp_qdrant.tools import points as points_tools
 from mcp_qdrant.tools.points import PointsGetResult, PointsScrollResult
+from mcp_qdrant.tools.points_shared import page_offset
 from mcp_qdrant.tools.registry import ToolRegistry
 
 
@@ -261,3 +263,11 @@ async def test_points_count_returns_count_result() -> None:
     assert isinstance(result, CallToolResult)
     payload = CountResult.model_validate(result.structured_content)
     assert payload.count == 5
+
+
+def test_page_offset_passes_ints_strs_and_none_through_and_stringifies_anything_else() -> None:
+    assert page_offset(None) is None
+    assert page_offset(7) == 7
+    assert page_offset("abc") == "abc"
+    point_id = UUID("12345678-1234-5678-1234-567812345678")
+    assert page_offset(point_id) == "12345678-1234-5678-1234-567812345678"

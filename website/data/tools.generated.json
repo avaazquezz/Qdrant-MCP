@@ -312,6 +312,22 @@
     "idempotent": true
   },
   {
+    "name": "qdrant_collection_copy",
+    "toolset": "admin",
+    "description": "Copy points (all vectors — dense, sparse and multivector — and payload) from one collection to another of the same Qdrant instance, entirely server-side: the vectors never pass through the model.\n\nThe target must already exist with a compatible vector configuration (see `qdrant_collection_info`); this tool does not create it. Use it to re-create a collection with another distance, quantization or HNSW layout, then switch an alias with `qdrant_alias_update`.\n\nEach call copies at most `max_points` points, in batches of `batch_size`, so no single call runs long. If the result has `done: false`, call again with the same arguments and `offset=next_offset`. Points that already exist in the target under the same id are overwritten, so re-running a copy is safe; points that were deleted from the source are not removed from the target. `copy_filter` copies only matching points. Points are visited in id order, so points added to the source with a lower id than the current offset during a long copy are not picked up.\n\nIf a batch fails, the error reports how many points were copied and the `offset` to resume from.\n\nExample: {\"source_collection\": \"docs_v1\", \"target_collection\": \"docs_v2\"} Example (continue): {\"source_collection\": \"docs_v1\", \"target_collection\": \"docs_v2\", \"offset\": 1000}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_payload_schema_infer",
+    "toolset": "admin",
+    "description": "Profile the payload keys that actually occur in a collection, so filters can be written against real keys instead of guessed ones.\n\nLooks at a random sample of `sample_size` points (optionally limited by `sample_filter`) and reports, per key: the value types seen (`string`, `integer`, `float`, `boolean`, `null`), whether it was ever an array, how many sampled points have it (`present_in`), and whether it has a payload index (`indexed`, `index_type`). Keys use the syntax filters expect: `a.b` for nested objects, `a[].b` for objects inside an array. For keys with a keyword/integer/uuid/bool index, `top_values` adds the most frequent values over the **whole collection** (not just the sample), taken from the index; set it to 0 to skip. Also lists indexed keys that no sampled point has (`indexed_but_unseen`).\n\nBecause it is a sample, a rare key can be missed: raise `sample_size` (up to 1000) if a field you expect doesn't show up. At most `max_fields` keys are returned, most common first (`fields_truncated` says if more existed).\n\nExample: {\"collection_name\": \"docs\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
     "name": "qdrant_snapshot_create",
     "toolset": "snapshots",
     "description": "Create a snapshot of one collection's current state.\n\nExample: {\"collection_name\": \"docs\"}",
