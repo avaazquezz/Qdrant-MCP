@@ -358,7 +358,7 @@ Contenido:
 Huecos a decidir cuando se aborde la fase (no ahora): dominio a usar, y si el copy
 final incluye alguna métrica de adopción (stars, downloads) o se lanza sin ella.
 
-### Fase 10 — `refactor/pure-mcp` → v2.0.0 ✅ Cerrada (PR #31, tag `v2.0.0` publicado en PyPI/GHCR/`.mcpb`); acción externa pendiente: MCP Registry
+### Fase 10 — `refactor/pure-mcp` → v2.0.0 ✅ Cerrada (PR #31, tag `v2.0.0` publicado en PyPI/GHCR/`.mcpb`); acciones externas hechas
 Servidor MCP puro (principio nº4). Se revierte la Fase 8 entera; **breaking** por semver,
 porque `QDRANT_MCP_BYO` salió publicado en v1.1.0.
 
@@ -378,8 +378,10 @@ porque `QDRANT_MCP_BYO` salió publicado en v1.1.0.
 - [x] Tag `v2.0.0` → publica PyPI/GHCR/`.mcpb` — verificado 2026-10-20 con la última
       release: PyPI `mcp-qdrant==2.6.0`, `ghcr.io/avaazquezz/qdrant-mcp:2.6.0` y
       `mcp-qdrant.mcpb` adjunto a la Release `v2.6.0`.
-- [ ] Reeditar la entrada del MCP Registry (`mcp-publisher publish`): a 2026-10-20
-      `io.github.avaazquezz/mcp-qdrant` sigue publicada como `1.0.1`.
+- [x] Reeditar la entrada del MCP Registry (`mcp-publisher publish`) — hecho 2026-10-20:
+      `io.github.avaazquezz/mcp-qdrant` publicada como `2.6.0` (`isLatest`), con
+      `websiteUrl` a la landing, el toolset `admin` y `QDRANT_MCP_MAX_LIMIT`; sigue
+      declarando solo el paquete PyPI, como la `1.0.1`.
 - [x] La landing desplegada ya no anuncia la instancia BYO: desde 2026-10-20 se sirve la de
       la Fase 16.
 
