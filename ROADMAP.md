@@ -358,7 +358,7 @@ Contenido:
 Huecos a decidir cuando se aborde la fase (no ahora): dominio a usar, y si el copy
 final incluye alguna métrica de adopción (stars, downloads) o se lanza sin ella.
 
-### Fase 10 — `refactor/pure-mcp` → v2.0.0 ✅ Cerrada (PR #31, tag `v2.0.0` publicado en PyPI/GHCR/`.mcpb`); acciones externas pendientes
+### Fase 10 — `refactor/pure-mcp` → v2.0.0 ✅ Cerrada (PR #31, tag `v2.0.0` publicado en PyPI/GHCR/`.mcpb`); acción externa pendiente: MCP Registry
 Servidor MCP puro (principio nº4). Se revierte la Fase 8 entera; **breaking** por semver,
 porque `QDRANT_MCP_BYO` salió publicado en v1.1.0.
 
@@ -372,11 +372,16 @@ porque `QDRANT_MCP_BYO` salió publicado en v1.1.0.
 - README sin la sección BYO, ni el SSRF guard en Seguridad. CHANGELOG `2.0.0`.
 
 **Acciones externas** (no automatizables desde el repo, a cargo del propietario):
-- [ ] Desmontar la instancia pública `mcp-qdrant.vazquezlabs.com` (contenedor, router
-      Traefik, registro DNS).
-- [ ] Tag `v2.0.0` → publica PyPI/GHCR/`.mcpb`; reeditar la entrada del MCP Registry
-      (`mcp-publisher publish`) para que deje de describir el modo BYO.
-- [ ] La landing desplegada sigue anunciando la instancia BYO hasta la Fase 16.
+- [x] Desmontar la instancia pública `mcp-qdrant.vazquezlabs.com` — hecho 2026-10-20:
+      contenedor `mcp_qdrant` (imagen `1.1.1`, `QDRANT_MCP_BYO=1`) y su router Traefik
+      retirados. El registro DNS se conserva: ese host pasa a servir la landing (Fase 16).
+- [x] Tag `v2.0.0` → publica PyPI/GHCR/`.mcpb` — verificado 2026-10-20 con la última
+      release: PyPI `mcp-qdrant==2.6.0`, `ghcr.io/avaazquezz/qdrant-mcp:2.6.0` y
+      `mcp-qdrant.mcpb` adjunto a la Release `v2.6.0`.
+- [ ] Reeditar la entrada del MCP Registry (`mcp-publisher publish`): a 2026-10-20
+      `io.github.avaazquezz/mcp-qdrant` sigue publicada como `1.0.1`.
+- [x] La landing desplegada ya no anuncia la instancia BYO: desde 2026-10-20 se sirve la de
+      la Fase 16.
 
 ### Fase 11 — `fix/sparse-multivector-io` → v2.1.0 ✅ Cerrada (PR #32, tag `v2.1.0`)
 Arregla dos huecos que dejan inservible el hybrid search de la Fase 2. **Hallazgos
@@ -645,8 +650,9 @@ explicar cómo funciona el proyecto de forma completa, fácil, interactiva y muy
   `nuxt.config.ts` (`siteUrl`): de ahí salen canonical, hreflang,
   `og:*`, `sitemap.xml` y `robots.txt` (rutas de servidor prerenderizadas), un único sitio donde vive
   el dominio; `NUXT_PUBLIC_SITE_URL` lo sobrescribe en build y vacío los omite.
-- Pendiente fuera del repo: ese host lo ocupa todavía la instancia pública antigua (Fase 10):
-  desmontarla y servir ahí la imagen nueva de la landing.
+- Desplegada el 2026-10-20 en ese host, tras desmontar la instancia pública antigua (Fase 10).
+  El dominio anterior, `mcp-qdrant-web.vazquezlabs.com`, redirige con 301 (conservando la ruta)
+  al nuevo, para no romper enlaces existentes.
 
 ## Versionado
 
