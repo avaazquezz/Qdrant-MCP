@@ -457,7 +457,7 @@ const en: Copy = {
       },
       {
         q: 'How was it built?',
-        a: 'With AI assistance (Claude Code), and the commits say so with a Co-Authored-By trailer. The assistant does not decide what is true: that is decided by tests against a real Qdrant, by scenarios CI re-records on every push, and by a review designed to distrust the code, which reproduced real defects. All of it is in the log above.',
+        a: 'Python 3.12 with uv, on top of the official MCP Python SDK and qdrant-client, with Pydantic validating every input and tenacity retrying transport failures. Quality is enforced by pytest against a real Qdrant in CI, strict mypy, ruff and pre-commit; GitHub Actions publishes to PyPI (Trusted Publishing), to GHCR and as a Claude Desktop bundle. Claude Code assisted the work and the commits carry its Co-Authored-By trailer; what decides what is true is the toolchain, not the assistant. This page is Nuxt, Tailwind, GSAP and Lenis, served by nginx in Docker.',
       },
       {
         q: 'Which Qdrant versions does it support?',
@@ -787,7 +787,7 @@ const es: Copy = {
       },
       {
         q: '¿Cómo se construyó?',
-        a: 'Con ayuda de IA (Claude Code), y los commits lo dicen con el trailer Co-Authored-By. El asistente no decide qué es verdad: lo deciden los tests contra un Qdrant real, los escenarios que CI vuelve a grabar en cada push y una revisión diseñada para desconfiar del código, que reprodujo fallos reales. Todo está en la bitácora de arriba.',
+        a: 'Python 3.12 con uv, sobre el SDK oficial de Python de MCP y qdrant-client, con Pydantic validando cada entrada y tenacity reintentando los fallos de transporte. La calidad la imponen pytest contra un Qdrant real en CI, mypy estricto, ruff y pre-commit; GitHub Actions publica en PyPI (Trusted Publishing), en GHCR y como bundle para Claude Desktop. Claude Code ayudó en el trabajo y los commits llevan su trailer Co-Authored-By; lo que decide qué es verdad es la cadena de herramientas, no el asistente. Esta página es Nuxt, Tailwind, GSAP y Lenis, servida por nginx en Docker.',
       },
       {
         q: '¿Qué versiones de Qdrant soporta?',

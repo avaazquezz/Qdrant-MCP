@@ -15,7 +15,7 @@ export default defineNuxtConfig({
       // Where the site is hosted. Canonical, hreflang, Open Graph URLs, the sitemap and
       // robots.txt all derive from it. NUXT_PUBLIC_SITE_URL overrides it at build time
       // (e.g. for a preview host); set it empty and those tags are omitted.
-      siteUrl: 'https://vazquezdev.pro',
+      siteUrl: 'https://mcp-qdrant.vazquezlabs.com',
     },
   },
   // Two static pages, one per language. The language switcher links between them, so the
