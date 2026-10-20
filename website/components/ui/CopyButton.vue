@@ -4,19 +4,23 @@ import { ref } from 'vue'
 const props = withDefaults(
   defineProps<{
     text: string
-    /** Accessible name AND visible label — every copy button on the page
-     * names its own payload ("Copy the config", "Copy the Docker command"),
-     * never a bare "Copy", so two buttons never share an accessible name. */
+    /** Accessible name AND visible label: every copy button names its own payload, never a
+     * bare "Copy", so two buttons never share an accessible name. */
     label: string
-    /** 'primary' = the ink-filled CTA (masthead, hero, colophon — one
-     * artifact, three places). 'plate' = the small outlined button in a
-     * CodePlate header, used everywhere else. */
+    copiedLabel?: string
+    failedLabel?: string
+    announceCopied?: string
+    announceFailed?: string
+    /** 'primary' = the ink-filled button; 'plate' = the small outlined one in a code header. */
     variant?: 'primary' | 'plate'
-    /** Swap ink/paper on the primary variant — the colophon sits on an ink
-     * ground, so its copy of this same button has to fill paper instead. */
-    invert?: boolean
   }>(),
-  { variant: 'plate', invert: false }
+  {
+    variant: 'plate',
+    copiedLabel: 'Copied',
+    failedLabel: 'Copy failed. The text is selected',
+    announceCopied: 'Copied to the clipboard.',
+    announceFailed: 'Copy failed. The text is selected: press Control C or Command C.',
+  }
 )
 
 type State = 'idle' | 'copied' | 'failed'
@@ -30,16 +34,14 @@ async function copy() {
     if (!navigator.clipboard) throw new Error('Clipboard API unavailable')
     await navigator.clipboard.writeText(props.text)
     state.value = 'copied'
-    announcement.value = 'Config copied to the clipboard.'
+    announcement.value = props.announceCopied
     resetTimer = setTimeout(() => (state.value = 'idle'), 1800)
   } catch {
-    // ponytail: no visible code plate to highlight from this generic
-    // button, so the fallback selects the payload in an offscreen textarea
-    // instead of the on-page block a plate-specific button could target —
-    // same "text is selected, press Ctrl/Cmd+C" contract either way.
+    // No on-page block to highlight from this generic button, so the fallback selects the
+    // payload in an offscreen textarea: the same "text is selected, press Ctrl/Cmd+C" contract.
     selectFallback()
     state.value = 'failed'
-    announcement.value = 'Copy failed. The text is selected — press Control C or Command C.'
+    announcement.value = props.announceFailed
   }
 }
 
@@ -48,12 +50,14 @@ function selectFallback() {
   el.value = props.text
   el.readOnly = true
   el.setAttribute('aria-hidden', 'true')
-  el.style.position = 'fixed'
-  el.style.top = '0'
-  el.style.left = '0'
-  el.style.opacity = '0.01'
-  el.style.width = '1px'
-  el.style.height = '1px'
+  Object.assign(el.style, {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    opacity: '0.01',
+    width: '1px',
+    height: '1px',
+  })
   document.body.appendChild(el)
   el.focus()
   el.select()
@@ -64,21 +68,19 @@ function selectFallback() {
 <template>
   <button
     type="button"
-    class="inline-flex items-center justify-center gap-2 border px-2.5 py-2 text-center text-ui transition-colors sm:min-w-[22ch] sm:px-4"
+    class="inline-flex items-center justify-center gap-2 border px-3 py-2 text-center text-ui transition-colors duration-200"
     :class="[
       variant === 'primary' ? 'min-h-11 rounded-sm' : 'min-h-10 rounded-sm text-[0.9375rem]',
       state === 'failed'
         ? 'border-2 border-spot text-spot'
         : variant === 'primary'
-          ? invert
-            ? 'border-paper bg-paper text-ink hover:bg-transparent hover:text-paper'
-            : 'border-ink bg-ink text-paper hover:bg-transparent hover:text-ink'
+          ? 'border-ink bg-ink text-paper hover:bg-transparent hover:text-ink'
           : 'border-ink text-ink hover:bg-ink hover:text-paper',
     ]"
-    :aria-label="state === 'failed' ? `${label} — copy failed, text selected` : label"
+    :aria-label="state === 'failed' ? `${label} (${failedLabel})` : label"
     @click="copy"
   >
-    <span aria-hidden="true">{{ state === 'copied' ? 'Copied' : state === 'failed' ? 'Copy failed — text selected' : label }}</span>
+    <span aria-hidden="true">{{ state === 'copied' ? copiedLabel : state === 'failed' ? failedLabel : label }}</span>
   </button>
   <p class="sr-only" role="status" aria-live="polite">{{ announcement }}</p>
 </template>

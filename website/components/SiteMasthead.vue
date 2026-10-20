@@ -1,86 +1,78 @@
 <script setup lang="ts">
-import { useSectionRules } from '~/composables/useSectionRules'
-import { defaultConfigJson } from '~/composables/useToolsets'
+import { REPO_URL, useLanding } from '~/composables/useLanding'
 
-const NAV = [
-  { href: '#s-02', label: 'two servers', id: '02' },
-  { href: '#s-03', label: 'what it buys', id: '03' },
-  { href: '#s-04', label: 'toolsets', id: '04' },
-  { href: '#s-05', label: 'register', id: '05' },
-  { href: '#s-06', label: 'objections', id: '06' },
-] as const
+const { copy, alternate, lang } = useLanding()
 
-// All seven — SiteSpine's desktop rail shows the same set; this is the
-// mobile equivalent. It lives here, not in SiteSpine, because it has to be
-// a full-width row of the masthead's own flow — as a flex sibling of
-// <main> inside the page's content-field wrapper (where SiteSpine's
-// desktop rail sits) it would fight main for a share of that row's width
-// instead of spanning the viewport on its own line.
-const SECTIONS = [
-  { id: '01', label: 'Hero — the top of the page' },
-  { id: '02', label: 'Two servers, same database' },
-  { id: '03', label: 'What the other 36 are for' },
-  { id: '04', label: 'You choose the surface' },
-  { id: '05', label: 'All 49, printed' },
-  { id: '06', label: 'The things that would stop me installing this' },
-  { id: '07', label: 'Add it, enable core, and ask your client to list its tools' },
-] as const
-
-// SiteSpine already runs the section-tracking observer; a second instance
-// here would double the IntersectionObserver work for the same data, so
-// the masthead's nav underline reads the same activeId instead.
-const { activeId } = useSectionRules()
-
-const config = defaultConfigJson()
+const links = [
+  { id: 'method', label: copy.nav.method },
+  { id: 'architecture', label: copy.nav.architecture },
+  { id: 'scenarios', label: copy.nav.scenarios },
+  { id: 'tools', label: copy.nav.tools },
+  { id: 'log', label: copy.nav.log },
+  { id: 'quality', label: copy.nav.quality },
+]
 </script>
 
 <template>
-  <header class="sticky top-0 z-50 border-b-2 border-ink bg-paper">
-    <div class="mx-auto flex h-14 max-w-sheet items-center justify-between gap-4 px-6">
-      <a href="#s-01" class="flex items-center gap-2 shrink-0">
-        <span class="flex h-[18px] w-[18px] items-center justify-center border border-ink" aria-hidden="true">
-          <span class="h-[6px] w-[6px] rounded-full bg-spot" />
+  <header class="sticky top-0 z-50 border-b border-ink bg-paper/95 backdrop-blur-sm">
+    <div class="mx-auto flex max-w-sheet items-center gap-4 px-4 py-2.5 sm:px-6">
+      <a
+        :href="lang === 'en' ? '/' : '/es/'"
+        class="flex shrink-0 items-center gap-2.5 font-mono text-ui font-semibold"
+        aria-label="mcp-qdrant"
+      >
+        <span class="grid h-5 w-5 place-items-center border-[1.5px] border-ink" aria-hidden="true">
+          <span class="h-1.5 w-1.5 rounded-full bg-spot" />
         </span>
-        <span class="font-mono text-ui font-semibold text-ink">mcp-qdrant</span>
-        <span class="hidden text-ui text-graphite xl:inline">unofficial MCP server for Qdrant</span>
+        mcp-qdrant
       </a>
 
-      <nav aria-label="Primary" class="hidden items-center gap-6 lg:flex">
-        <a
-          v-for="item in NAV"
-          :key="item.id"
-          :href="item.href"
-          :aria-current="activeId === item.id ? 'true' : undefined"
-          class="border-b-2 py-1 text-ui text-ink transition-colors"
-          :class="activeId === item.id ? 'border-spot' : 'border-transparent hover:border-ink'"
-        >{{ item.label }}</a>
+      <nav :aria-label="copy.a11y.sections" class="hidden flex-1 justify-center md:flex">
+        <ul class="flex items-center gap-1">
+          <li v-for="link in links" :key="link.id">
+            <a
+              :href="`#${link.id}`"
+              class="px-3 py-2 text-micro text-graphite transition-colors duration-200 hover:text-ink"
+            >
+              {{ link.label }}
+            </a>
+          </li>
+        </ul>
       </nav>
+      <div class="flex-1 md:hidden" />
 
-      <div class="flex shrink-0 items-center gap-4">
-        <span class="hidden font-mono text-micro text-graphite xl:inline">v1.1.1</span>
-        <a
-          href="https://github.com/avaazquezz/Qdrant-MCP"
-          target="_blank"
-          rel="noopener"
-          class="hidden text-ui text-ink underline decoration-1 underline-offset-4 hover:no-underline xl:inline"
-        >Source<span class="sr-only"> (opens in a new tab)</span></a>
-        <UiCopyButton :text="config" label="Copy the config" variant="primary" />
-      </div>
+      <a
+        :href="alternate.href"
+        :hreflang="alternate.lang"
+        :lang="alternate.lang"
+        class="grid h-9 min-w-9 place-items-center border border-ink px-2 font-mono text-micro font-semibold transition-colors duration-200 hover:bg-ink hover:text-paper"
+        :aria-label="`${copy.a11y.langSwitch}: ${alternate.lang === 'es' ? 'Español' : 'English'}`"
+      >
+        {{ alternate.label }}
+      </a>
+
+      <a
+        :href="REPO_URL"
+        target="_blank"
+        rel="noopener"
+        data-magnetic
+        class="inline-flex min-h-10 items-center gap-2 rounded-sm border border-ink bg-ink px-3.5 text-ui text-paper transition-colors duration-200 hover:bg-transparent hover:text-ink"
+      >
+        {{ copy.nav.github }}
+        <span aria-hidden="true">↗</span>
+        <span class="sr-only">{{ copy.a11y.opensNewTab }}</span>
+      </a>
     </div>
-    <p class="px-6 pb-2 text-micro text-graphite xl:hidden">unofficial MCP server for Qdrant</p>
 
-    <nav aria-label="Sections" class="overflow-x-auto border-t border-ink px-6 py-2 lg:hidden">
-      <ol class="flex w-max gap-2">
-        <li v-for="s in SECTIONS" :key="s.id">
-          <a
-            :href="`#s-${s.id}`"
-            :aria-current="activeId === s.id ? 'true' : undefined"
-            :aria-label="`Section ${s.id}: ${s.label}`"
-            class="flex h-9 w-9 items-center justify-center border border-ink font-mono text-ordinal transition-colors"
-            :class="activeId === s.id ? 'bg-ink text-paper' : 'bg-paper text-ink'"
-          >{{ s.id }}</a>
+    <!-- On small screens the section links become a scrollable row: nothing is hidden behind a menu. -->
+    <nav :aria-label="copy.a11y.sections" class="border-t border-ink/20 md:hidden">
+      <ul class="flex gap-1 overflow-x-auto px-3 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <li v-for="link in links" :key="link.id" class="shrink-0">
+          <a :href="`#${link.id}`" class="block px-2.5 py-2 text-micro text-graphite">
+            {{ link.label }}
+          </a>
         </li>
-      </ol>
+      </ul>
     </nav>
   </header>
 </template>

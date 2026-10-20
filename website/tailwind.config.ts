@@ -14,6 +14,12 @@ export default <Partial<Config>>{
         spot: '#C2172F',
         tint: '#E7E2D6',
         mist: '#A2A6B4',
+        // The instrument panel: the dark plate behind the live set-pieces (the vector
+        // field, the call transcripts). Same warm-ink family as `ink`, never #000.
+        panel: '#0F1115',
+        'panel-line': '#2A2E38',
+        'panel-ink': '#E9E6DD',
+        'panel-dim': '#9298A8',
       },
       fontFamily: {
         sans: ['Archivo', 'system-ui', 'sans-serif'],

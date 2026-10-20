@@ -2,70 +2,144 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------ tokens
+   Motion vocabulary, defined once. `instrument` is the page's single ease: a dry
+   start and a long settle, like a needle coming to rest. Durations are named by
+   what they are for, not by number. */
+:root {
+  --ease-instrument: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 200ms;
+  --dur-reveal: 640ms;
+  --dur-setpiece: 1100ms;
+}
+
 html {
   color-scheme: light;
-  /* Backstop, not a fix for a known element: at the very narrowest widths,
-     cumulative sub-pixel rounding across many flex/grid rows can leave the
-     page 2-5px horizontally scrollable with no single element visibly
-     overflowing. Nothing at the page level is meant to scroll sideways —
-     the deliberately scrollable containers (code plates, the mobile
-     section row) keep their own overflow-x: auto regardless. Set on html,
-     not body — giving body its own overflow turns it into a new scroll
-     container and breaks position: sticky relative to the viewport. */
+  /* Backstop for sub-pixel rounding, not a fix for a known element. Set on html,
+     not body: giving body its own overflow makes it a scroll container and breaks
+     position: sticky relative to the viewport. */
   overflow-x: hidden;
+  scroll-padding-top: 5rem;
+}
+
+/* Lenis owns the scroll when it is running; this keeps native smooth-scroll from
+   fighting it, and keeps wheel/touch inside the elements that must scroll alone. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
 }
 
 body {
   @apply bg-paper text-ink font-sans antialiased;
 }
 
-/* spot has exactly one meaning on this page: this writes to your data, or
-   this is a live value. It is never used for anything decorative. */
+/* `spot` means one thing on this page: this was measured — a live value, or a
+   result that came from a real server. It is never decorative. */
 ::selection {
   @apply bg-ink text-paper;
 }
 
-/* Every interactive element gets a designed, visible ring — no control on
-   this page relies on the browser default. Sections on the ink ground
-   (ColophonSection, .on-ink) flip the ring to paper so it stays visible. */
+/* Every interactive element gets a designed, visible ring. Surfaces on the dark
+   panel flip it to paper. */
 :focus-visible {
   outline: 2px solid theme('colors.spot');
   outline-offset: 2px;
 }
-.on-ink :focus-visible {
-  outline-color: theme('colors.paper');
+.on-panel :focus-visible {
+  outline-color: theme('colors.panel-ink');
 }
 
-/* Structural motion vocabulary — CSS only, no animation library. Both
-   keyframes are written "backwards": the finished, correct state is the
-   element's default appearance, and the keyframe only describes how it
-   arrived. That is what lets prefers-reduced-motion simply not apply the
-   animation at all (below) without any element ever being hidden in
-   markup, waiting on JS, or breaking under a blocked stylesheet. */
+/* ------------------------------------------------------------- structure */
+.section {
+  padding-block: clamp(4.5rem, 9vw, 8.5rem);
+}
+
+/* A numbered section label. The number is the section's real position in the page
+   (the ruler in the margin counts the same sections), not decoration. */
+.ordinal {
+  @apply font-mono text-ordinal uppercase text-graphite;
+  letter-spacing: 0.14em;
+}
+
+.rule {
+  border-top: 2px solid theme('colors.ink');
+}
+
+.measure {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------- the first paint, CSS only
+   The headline is the LCP element, so it must never wait for JavaScript. This
+   reveal is written "backwards": the finished state is the element's default look
+   and the keyframe only describes how it arrived. Without CSS animation, or under
+   reduced motion, the text is simply there. */
+@keyframes rise {
+  from {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(0.35em);
+  }
+}
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem);
+  }
+}
 @keyframes draw {
   from {
     transform: scaleX(0);
   }
 }
-@keyframes stamp {
-  from {
-    transform: scale(0);
-  }
-}
 
 @media (prefers-reduced-motion: no-preference) {
+  .anim-rise {
+    animation: rise var(--dur-setpiece) var(--ease-instrument) backwards;
+  }
+  .anim-settle {
+    animation: settle var(--dur-reveal) var(--ease-instrument) backwards;
+  }
   .anim-draw {
     transform-origin: left;
-    animation: draw 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  .anim-stamp {
-    animation: stamp 220ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+    animation: draw var(--dur-reveal) var(--ease-instrument) both;
   }
 }
 
-/* The net: whatever a component author forgets, this is the floor. Under
-   reduced motion every animation and transition collapses to effectively
-   nothing, everywhere, with no per-component opt-in to remember. */
+/* ----------------------------------------------------------------- probe
+   The probe cursor is an overlay ring that follows a fine pointer. It never
+   replaces the native cursor and never intercepts a click. */
+.probe-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border: 1.5px solid theme('colors.ink');
+  border-radius: 9999px;
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity var(--dur-micro) var(--ease-instrument),
+    border-color var(--dur-micro) var(--ease-instrument);
+  mix-blend-mode: normal;
+}
+.probe-ring[data-active='true'] {
+  opacity: 1;
+}
+.probe-ring[data-verified='true'] {
+  border-color: theme('colors.spot');
+}
+
+/* The net: whatever a component author forgets, this is the floor. Under reduced
+   motion every animation and transition collapses to nothing, everywhere. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
