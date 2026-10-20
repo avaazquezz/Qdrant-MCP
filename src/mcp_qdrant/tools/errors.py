@@ -16,7 +16,9 @@ from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedR
 from mcp_qdrant.qdrant_client import qdrant_retry
 
 
-def _qdrant_error_message(exc: UnexpectedResponse | ResponseHandlingException) -> str:
+def _qdrant_error_message(
+    exc: UnexpectedResponse | ResponseHandlingException | NotImplementedError,
+) -> str:
     if isinstance(exc, UnexpectedResponse):
         try:
             return str(exc.structured()["status"]["error"])
@@ -45,5 +47,7 @@ async def call_qdrant[T](coro_factory: Callable[[], Awaitable[T]]) -> T:
 
     try:
         return await _run()
-    except (UnexpectedResponse, ResponseHandlingException) as exc:
+    # NotImplementedError: the embedded client (QDRANT_LOCAL_PATH) raises it for calls it can't
+    # emulate, e.g. cluster info and optimizer progress (verified); its message says so plainly.
+    except (UnexpectedResponse, ResponseHandlingException, NotImplementedError) as exc:
         raise ToolError(_qdrant_error_message(exc)) from exc

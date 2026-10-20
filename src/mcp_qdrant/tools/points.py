@@ -20,7 +20,7 @@ from qdrant_client.http.models import (
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector, page_offset
 from mcp_qdrant.tools.registry import ToolRegistry
-from mcp_qdrant.tools.schemas import FilterInput
+from mcp_qdrant.tools.schemas import FilterInput, StrictInput
 
 _UPSERT_ANNOTATIONS = ToolAnnotations(
     title="Upsert Qdrant points",
@@ -61,7 +61,7 @@ _COUNT_ANNOTATIONS = ToolAnnotations(
 )
 
 
-class PointInput(BaseModel):
+class PointInput(StrictInput):
     """A point to upsert: id + vector(s) + payload. See `PointVectorValue`
     for the accepted vector shapes."""
 

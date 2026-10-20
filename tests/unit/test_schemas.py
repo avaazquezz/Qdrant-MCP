@@ -143,6 +143,13 @@ FILTER_OK: list[dict[str, Any]] = [
         ]
     },
 ]
+# Explicit nulls for unset optional fields: what Qdrant's own clients send, and what the real
+# model accepts. The compact schema must not forbid them (found by an independent review).
+FILTER_OK += [
+    {"must": None},
+    {"should": None, "must_not": None, "min_should": None},
+    {"must": [{"key": "a", "match": {"value": 1}}], "should": None},
+]
 FILTER_BAD: list[Any] = [{"bogus": []}, {"must": "x"}, {"min_should": {"conditions": []}}, [], "x"]
 
 
@@ -171,13 +178,34 @@ SEARCH_PARAMS_OK: list[dict[str, Any]] = [
 ]
 
 
+SEARCH_PARAMS_OK += [
+    {"hnsw_ef": None},
+    {"quantization": None},
+    {"quantization": {"ignore": None, "rescore": None, "oversampling": None}},
+    {"acorn": None},
+    {"acorn": {"enable": None, "max_selectivity": None}},
+    {"idf": None},
+    {"idf": "global"},  # IdfScope
+    {"idf": {"corpus": {"must": [{"key": "lang", "match": {"value": "en"}}]}}},  # IdfCorpusParams
+]
+
+
 @pytest.mark.parametrize("sample", SEARCH_PARAMS_OK)
 def test_search_params_schema_accepts_what_qdrant_accepts(sample: dict[str, Any]) -> None:
     assert _advertised(SearchParamsInput).is_valid(sample)
     TypeAdapter(SearchParamsInput).validate_python(sample)
 
 
-@pytest.mark.parametrize("sample", [{"hnsw_ef": "wide"}, {"bogus": 1}, {"exact": "yes please"}])
+@pytest.mark.parametrize(
+    "sample",
+    [
+        {"hnsw_ef": "wide"},
+        {"bogus": 1},
+        {"exact": "yes please"},
+        {"idf": "local"},  # IdfScope only has `global`
+        {"quantization": {"bogus": True}},
+    ],
+)
 def test_search_params_schema_rejects_what_qdrant_rejects(sample: dict[str, Any]) -> None:
     assert not _advertised(SearchParamsInput).is_valid(sample)
     with pytest.raises(ValidationError):
@@ -274,12 +302,16 @@ def test_the_compact_filter_lists_the_same_top_level_keys_as_the_model() -> None
 def test_the_compact_search_params_list_the_same_keys_as_the_model() -> None:
     advertised = TypeAdapter(SearchParamsInput).json_schema()
     assert set(advertised["properties"]) == set(qm.SearchParams.model_fields)
-    assert set(advertised["properties"]["quantization"]["properties"]) == set(
-        qm.QuantizationSearchParams.model_fields
-    )
-    assert set(advertised["properties"]["acorn"]["properties"]) == set(
-        qm.AcornSearchParams.model_fields
-    )
+
+    def inner(name: str) -> set[str]:
+        # every optional field is `anyOf [<schema>, null]`
+        (schema,) = [
+            s for s in advertised["properties"][name]["anyOf"] if s.get("type") == "object"
+        ]
+        return set(schema["properties"])
+
+    assert inner("quantization") == set(qm.QuantizationSearchParams.model_fields)
+    assert inner("acorn") == set(qm.AcornSearchParams.model_fields)
 
 
 # --- generated schemas keep the structure of the model they came from ----------------

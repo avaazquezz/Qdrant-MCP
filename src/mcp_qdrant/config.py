@@ -29,6 +29,12 @@ DEFAULT_TOOLSETS: tuple[Toolset, ...] = ("core",)
 # payload (and vectors, if requested) into the model's context, so an unbounded
 # `limit` is a way to flood it by accident.
 DEFAULT_MAX_LIMIT = 1000
+# The cap can't go below what the tools' own defaults ask for, or a call with no
+# arguments beyond the required ones would be refused: the largest default request
+# is 30 results (`limit` 10 × `group_size` 3, or `sample` 10 × `limit` 3 on the
+# distance matrices, or three batch items of 10). A test calls every tool with only
+# its required arguments at this minimum, so a new default that exceeds it fails there.
+MIN_MAX_LIMIT = 30
 
 
 class Settings(BaseModel):
@@ -43,7 +49,7 @@ class Settings(BaseModel):
     shared_secret: str | None = None
     http_host: str = "127.0.0.1"
     http_port: int = 8000
-    max_limit: Annotated[int, Field(gt=0)] = DEFAULT_MAX_LIMIT
+    max_limit: Annotated[int, Field(ge=MIN_MAX_LIMIT)] = DEFAULT_MAX_LIMIT
 
     @model_validator(mode="after")
     def _check_single_connection_target(self) -> Settings:
@@ -103,7 +109,8 @@ def _parse_max_limit(value: str | None) -> int:
         return int(value)
     except ValueError:
         raise ValueError(
-            f"QDRANT_MCP_MAX_LIMIT must be a positive integer, got {value!r}."
+            f"QDRANT_MCP_MAX_LIMIT must be an integer of at least {MIN_MAX_LIMIT} (so every "
+            f"tool's default arguments fit), got {value!r}."
         ) from None
 
 

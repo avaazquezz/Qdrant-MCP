@@ -151,7 +151,7 @@ Y el resto de tools de payload/indexing/vectores (toolset nuevo `payload`):
 
 - `qdrant_payload_set`, `_overwrite`, `_delete`, `_clear`, `_facet`
 - `qdrant_payload_index_create`, `_delete`
-- `qdrant_points_batch_update` (operación atómica múltiple)
+- `qdrant_points_batch_update` (operaciones múltiples en orden; **no** atómico — corregido en la Fase 15b)
 - `qdrant_vectors_update`, `_delete` (named vectors sobre points existentes)
 - `qdrant_collection_vector_create`, `_delete` (named vectors a nivel colección)
 
@@ -517,7 +517,7 @@ determinista, sin embeddings: compatible con el principio nº1.
   de 513 KB a 571 KB de `inputSchema` y `core` solo ya son 149 KB. No es nuevo (cada tool
   incluye su propia copia del schema de `Filter`, ~16 KB), pero queda como trabajo de la Fase 15.
 
-### Fase 15 — `feat/response-limits` → v2.5.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
+### Fase 15 — `feat/response-limits` → v2.5.0 ✅ Cerrada (PR #36, tag `v2.5.0`)
 Menos contexto y sin inundaciones accidentales. Medido antes de tocar nada (Fase 14): los
 `inputSchema` que el cliente carga en el contexto del modelo eran **571 KB** para el catálogo
 completo y **150 KB** para el toolset `core` por defecto.
@@ -564,6 +564,45 @@ completo y **150 KB** para el toolset `core` por defecto.
 - `mypy` estricto exige `types-jsonschema` para los tests (se añade como dependencia de desarrollo);
   `jsonschema` en sí ya es dependencia dura de `mcp`.
 
+### Fase 15b — `fix/review-hardening` → v2.6.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
+Revisión independiente del código de las Fases 11–15: un segundo lector sin contexto de mi
+razonamiento, con la orden de **reproducir y no especular**. Cada hallazgo se volvió a reproducir
+contra un Qdrant `v1.19.0` real antes de arreglarlo.
+
+**Reproducidos y corregidos** (detalle en el CHANGELOG `2.6.0`):
+1. Un `points_filter` sin condiciones (`{}`, `{"must": []}`, `{"should": []}`) **borraba la colección
+   entera**: la guarda "exactamente un selector" lo aceptaba. Ahora se rechaza en delete, payload,
+   vectors y dentro de `qdrant_points_batch_update`.
+2. `qdrant_points_batch_update` se describía como **atómico** desde la Fase 3 y no lo es (una
+   operación válida seguida de otra inválida deja la primera aplicada). Es la **misma clase de
+   error que cometí con los aliases en la Fase 12**: afirmar una propiedad de Qdrant sin probarla.
+3. `qdrant_payload_schema_infer`: abortaba con un índice entero `lookup: false`; imprimía claves que
+   la sintaxis de filtros rechaza (espacios, `@`, `.`, `[]`, emojis) y no las casaba con su índice.
+4. Claves desconocidas en inputs anidados se ignoraban en silencio: un prefetch con `filter` (el
+   nombre de Qdrant) en vez de `query_filter` devolvía resultados **sin filtrar**.
+5. Los schemas compactos de `Filter`/`SearchParams` (Fase 15) rechazaban `null` explícito e
+   `idf: "global"` que el modelo real acepta.
+6. `QDRANT_MCP_MAX_LIMIT` por debajo de 30 hacía fallar llamadas con solo los argumentos
+   obligatorios; ahora el mínimo es 30, con un test que lo vigila.
+7. Con `QDRANT_LOCAL_PATH`, dos tools de `admin` perdían su mensaje (`NotImplementedError`).
+8. `qdrant_collection_copy`: `batch_size` hasta 1000 superaba el límite de 32 MiB de Qdrant con
+   vectores de 3072 dimensiones; mensajes de error con repr de Python.
+
+**Lección de método (ya en mi memoria de trabajo):** las afirmaciones sobre el comportamiento de
+Qdrant que no he ejecutado son deuda. Este repo ya lo decía en el principio nº3; la revisión mostró
+que lo incumplí dos veces. Las afirmaciones de comportamiento añadidas desde la Fase 12 (aliases,
+MMR, `order_by` en scroll, fórmulas, pesos RRF, batch) ya tienen un test de integración que las
+fija; las anteriores a la Fase 12 no se han revisado una a una.
+
+**Anotado, no corregido** (no reproducido como defecto o sin impacto real hoy):
+- `call_qdrant` reintenta con `tenacity` ante un fallo de transporte también en operaciones no
+  idempotentes (p. ej. `rename_alias`): tras un timeout en el que el servidor sí aplicó la primera
+  petición, el reintento fallaría con un error confuso. No corrompe datos; el arreglo sería no
+  reintentar según `idempotent_hint`.
+- Una etapa de `prefetch` sin `query` (válida en Qdrant: candidatos por filtro) y las etapas con
+  `mmr`/`formula`/`order_by`/`sample`/`lookup_from` no se pueden expresar. Es una limitación de
+  capacidad, no una regresión; ahora el error lo dice con claridad.
+
 ### Fase 16 — `feat/landing-technical` (sin bump de semver del paquete)
 Rediseño completo de `/website` (decidido 2026-10-20): de landing de un servicio a
 **landing técnica para quien evalúa el proyecto** (reclutadores/equipos técnicos). Debe
@@ -604,7 +643,8 @@ explicar cómo funciona el proyecto de forma completa, fácil, interactiva y muy
 | v2.2.0 | 12 — aliases e introspección (`admin`) |
 | v2.3.0 | 13 — operaciones server-side: copy, schema infer (`admin`) |
 | v2.4.0 | 14 — potencia de query |
-| v2.5.0 | 15 — límites de respuesta |
+| v2.5.0 | 15 — límites de respuesta y schemas compactos |
+| v2.6.0 | 15b — revisión independiente: correcciones |
 | — | 16 — landing técnica, sin versión de paquete |
 
 ---

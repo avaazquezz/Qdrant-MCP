@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from pydantic import TypeAdapter, WithJsonSchema
+from pydantic import BaseModel, ConfigDict, TypeAdapter, WithJsonSchema
 from qdrant_client.http.models import (
     BinaryQuantization,
     CollectionParamsDiff,
@@ -40,6 +40,17 @@ from qdrant_client.http.models import (
     VectorParams,
     VectorParamsDiff,
 )
+
+
+class StrictInput(BaseModel):
+    """Base for the nested input models of tool parameters. Pydantic ignores unknown
+    keys by default, which here means a misspelled or mis-named key silently does
+    nothing — verified: a prefetch stage given Qdrant's own `filter` (instead of
+    `query_filter`) returned unfiltered results, and `{"mmr": {"candidate_limit": 5}}`
+    ran MMR with its defaults. Forbidding extras turns those into a clear error."""
+
+    model_config = ConfigDict(extra="forbid")
+
 
 # --- generated: strip prose, keep structure -----------------------------------------
 
@@ -108,15 +119,26 @@ FILTER_DESCRIPTION = (
     "objects use dots (`a.b`); objects inside arrays use `a[].b`."
 )
 
+
+def _optional(schema: dict[str, Any]) -> dict[str, Any]:
+    """Every field of these models is Optional, and Qdrant's own clients send an
+    explicit `null` for an unset one. A schema that forbade it would make a client
+    that validates arguments refuse a legal call (found by an independent review:
+    `{"must": null}`, `{"hnsw_ef": null}`)."""
+    return {"anyOf": [schema, {"type": "null"}]}
+
+
 # Qdrant accepts a list of conditions or a single condition (both validated by the
 # real `Filter` model); the advertised schema must allow both, or a client that
 # validates arguments against it would reject a legal call.
-_CONDITIONS: dict[str, Any] = {
-    "anyOf": [
-        {"type": "array", "items": {"type": "object"}},
-        {"type": "object"},
-    ]
-}
+_CONDITIONS: dict[str, Any] = _optional(
+    {
+        "anyOf": [
+            {"type": "array", "items": {"type": "object"}},
+            {"type": "object"},
+        ]
+    }
+)
 
 _FILTER_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -125,14 +147,16 @@ _FILTER_SCHEMA: dict[str, Any] = {
         "must": _CONDITIONS,
         "should": _CONDITIONS,
         "must_not": _CONDITIONS,
-        "min_should": {
-            "type": "object",
-            "properties": {
-                "conditions": {"type": "array", "items": {"type": "object"}},
-                "min_count": {"type": "integer"},
-            },
-            "required": ["conditions", "min_count"],
-        },
+        "min_should": _optional(
+            {
+                "type": "object",
+                "properties": {
+                    "conditions": {"type": "array", "items": {"type": "object"}},
+                    "min_count": {"type": "integer"},
+                },
+                "required": ["conditions", "min_count"],
+            }
+        ),
     },
     "additionalProperties": False,
 }
@@ -144,28 +168,36 @@ _SEARCH_PARAMS_SCHEMA: dict[str, Any] = {
         "accurate, slower). `exact`: skip the index and brute-force. `indexed_only`: "
         "search only indexed segments. `quantization`: {ignore, rescore, oversampling} "
         "for quantized collections. `acorn`: {enable, max_selectivity} for filtered "
-        "searches. `idf`: advanced, for sparse-vector IDF scoring."
+        "searches. `idf`: advanced, for sparse-vector IDF scoring (`global`, or an object "
+        "with a `corpus` filter)."
     ),
     "properties": {
-        "hnsw_ef": {"type": "integer"},
-        "exact": {"type": "boolean"},
-        "indexed_only": {"type": "boolean"},
-        "quantization": {
-            "type": "object",
-            "properties": {
-                "ignore": {"type": "boolean"},
-                "rescore": {"type": "boolean"},
-                "oversampling": {"type": "number"},
-            },
-        },
-        "acorn": {
-            "type": "object",
-            "properties": {
-                "enable": {"type": "boolean"},
-                "max_selectivity": {"type": "number"},
-            },
-        },
-        "idf": {"type": "object"},
+        "hnsw_ef": _optional({"type": "integer"}),
+        "exact": _optional({"type": "boolean"}),
+        "indexed_only": _optional({"type": "boolean"}),
+        "quantization": _optional(
+            {
+                "type": "object",
+                "properties": {
+                    "ignore": _optional({"type": "boolean"}),
+                    "rescore": _optional({"type": "boolean"}),
+                    "oversampling": _optional({"type": "number"}),
+                },
+                "additionalProperties": False,
+            }
+        ),
+        "acorn": _optional(
+            {
+                "type": "object",
+                "properties": {
+                    "enable": _optional({"type": "boolean"}),
+                    "max_selectivity": _optional({"type": "number"}),
+                },
+                "additionalProperties": False,
+            }
+        ),
+        # `"global"`, or {"corpus": <filter>} to compute IDF over a filtered subset.
+        "idf": _optional({"anyOf": [{"type": "string", "enum": ["global"]}, {"type": "object"}]}),
     },
     "additionalProperties": False,
 }

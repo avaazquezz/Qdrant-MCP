@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "mcp-qdrant",
   "display_name": "Qdrant MCP",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "MCP server that wraps the Qdrant vector database API as tools.",
   "author": {
     "name": "Adrián"
@@ -67,7 +67,7 @@
       "title": "Max results per call",
       "description": "Largest number of points a single tool call may ask for; bigger requests are refused so a mistake can't flood the conversation.",
       "default": 1000,
-      "min": 1,
+      "min": 30,
       "required": false
     }
   },

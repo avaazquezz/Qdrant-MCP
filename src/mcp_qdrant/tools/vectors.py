@@ -1,4 +1,4 @@
-"""The `payload` toolset (Fase 3, part 2): atomic batch updates and
+"""The `payload` toolset (Fase 3, part 2): ordered (not all-or-nothing) batch updates and
 named-vector operations, both on existing points and on the collection
 itself. See `payload.py` for the payload value/index side of this toolset.
 """
@@ -9,7 +9,7 @@ from typing import Annotated, Literal, cast
 
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
-from pydantic import BaseModel, Field
+from pydantic import Field
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
     ClearPayloadOperation,
@@ -19,6 +19,7 @@ from qdrant_client.http.models import (
     DenseVectorConfig,
     DenseVectorNameConfig,
     Distance,
+    Filter,
     Modifier,
     MultiVectorComparator,
     MultiVectorConfig,
@@ -35,9 +36,13 @@ from qdrant_client.http.models import (
 )
 
 from mcp_qdrant.tools.errors import call_qdrant
-from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector
+from mcp_qdrant.tools.points_shared import (
+    PointVectorValue,
+    build_points_selector,
+    reject_unconstrained_filter,
+)
 from mcp_qdrant.tools.registry import ToolRegistry
-from mcp_qdrant.tools.schemas import BatchOperationsSchema, FilterInput
+from mcp_qdrant.tools.schemas import BatchOperationsSchema, FilterInput, StrictInput
 
 BatchOperation = (
     UpsertOperation
@@ -65,7 +70,7 @@ _VECTOR_DELETE_ANNOTATIONS = ToolAnnotations(
     open_world_hint=True,
 )
 _BATCH_UPDATE_ANNOTATIONS = ToolAnnotations(
-    title="Batch-update Qdrant points atomically",
+    title="Batch-update Qdrant points in order",
     read_only_hint=False,
     destructive_hint=True,
     idempotent_hint=False,
@@ -87,7 +92,7 @@ _VECTORS_DELETE_ANNOTATIONS = ToolAnnotations(
 )
 
 
-class PointVectorInput(BaseModel):
+class PointVectorInput(StrictInput):
     """A point's vector(s) to replace."""
 
     id: int | str
@@ -167,15 +172,26 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         operations: Annotated[list[BatchOperation], Field(min_length=1), BatchOperationsSchema],
     ) -> list[UpdateResult]:
         """Run multiple point operations (upsert, delete,
-        set/overwrite/delete/clear payload, update/delete vectors)
-        atomically against one collection, in the order given. Each item is
+        set/overwrite/delete/clear payload, update/delete vectors) against
+        one collection, in the order given, in a single request. Each item is
         one of Qdrant's own tagged operation shapes, keyed by operation name.
+
+        Not all-or-nothing (verified): if one operation fails, the ones before
+        it stay applied, so check the collection after an error. An operation
+        that selects points by `filter` needs at least one condition — an empty
+        filter would select every point and is refused.
 
         Example: {"collection_name": "docs", "operations": [
             {"upsert": {"points": [{"id": 1, "vector": [0.1, 0.2, 0.3, 0.4]}]}},
             {"delete_payload": {"keys": ["city"], "points": [1]}}
         ]}
         """
+        for index, operation in enumerate(operations):
+            name = next(iter(type(operation).model_fields))  # each operation has one field
+            selector = getattr(operation, name, None)
+            selector_filter = getattr(selector, "filter", None)
+            if isinstance(selector_filter, Filter):
+                reject_unconstrained_filter(selector_filter, f"operations[{index}].{name}.filter")
         return await call_qdrant(
             lambda: client.batch_update_points(collection_name, update_operations=operations)
         )

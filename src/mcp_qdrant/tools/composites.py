@@ -16,6 +16,7 @@ not a RAG" principle:
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from typing import Annotated, Any, cast
 
@@ -24,6 +25,8 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
+    IntegerIndexParams,
+    PayloadIndexInfo,
     PointStruct,
     Sample,
     SampleQuery,
@@ -39,6 +42,18 @@ from mcp_qdrant.tools.schemas import FilterInput
 # integer, uuid and bool work; float, datetime, text and geo answer 400 "No
 # appropriate index for faceting").
 _FACETABLE_INDEX_TYPES = frozenset({"keyword", "integer", "uuid", "bool"})
+
+
+def _can_facet(index: PayloadIndexInfo) -> bool:
+    """Whether `facet` works on this payload index. The type is not enough: an
+    integer index created with `lookup: false` (range-only) answers 400 "No
+    appropriate index for faceting" (verified), and one such index would abort
+    the whole profile."""
+    if index.data_type.value not in _FACETABLE_INDEX_TYPES:
+        return False
+    params = index.params
+    return not (isinstance(params, IntegerIndexParams) and params.lookup is False)
+
 
 _COPY_ANNOTATIONS = ToolAnnotations(
     title="Copy points between Qdrant collections",
@@ -104,10 +119,22 @@ def _type_name(value: object) -> str:
     return type(value).__name__
 
 
+def _segment(name: str) -> str:
+    """One path segment as Qdrant's filter syntax wants it: a plain identifier
+    (letters, digits, `_`, `-`) as is, anything else — a space, `@`, `/`, `.`,
+    `[]`, an emoji — in double quotes. Verified: unquoted `my key` is a 400, and
+    an unquoted literal key `k[]` is read as an array path rather than the key.
+    Index keys are reported by Qdrant in this same quoted form, so quoting here is
+    also what lets a key be matched to its index."""
+    if name and all(ch.isalnum() or ch in "_-" for ch in name):
+        return name
+    return f'"{name}"'
+
+
 def _walk(value: Any, key: str, seen: dict[str, tuple[set[str], bool]]) -> None:
     """Record every leaf of `value` under the key Qdrant filters use for it:
     `a.b` for nested objects, `a[].b` for objects inside an array, and the bare
-    key for an array of scalars."""
+    key for an array of scalars (segments are quoted where the syntax needs it)."""
 
     def record(leaf_key: str, type_name: str | None, array: bool) -> None:
         types, was_array = seen.setdefault(leaf_key, (set(), False))
@@ -117,14 +144,15 @@ def _walk(value: Any, key: str, seen: dict[str, tuple[set[str], bool]]) -> None:
 
     if isinstance(value, dict):
         for child_key, child in value.items():
-            _walk(child, f"{key}.{child_key}" if key else str(child_key), seen)
+            segment = _segment(str(child_key))
+            _walk(child, f"{key}.{segment}" if key else segment, seen)
     elif isinstance(value, list):
         if not value:
             record(key, None, True)
         for item in value:
             if isinstance(item, dict):
                 for child_key, child in item.items():
-                    _walk(child, f"{key}[].{child_key}", seen)
+                    _walk(child, f"{key}[].{_segment(str(child_key))}", seen)
             elif isinstance(item, list):
                 record(key, "array", True)
             else:
@@ -183,7 +211,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         source_collection: str,
         target_collection: str,
         copy_filter: FilterInput | None = None,
-        batch_size: Annotated[int, Field(gt=0, le=1000)] = 100,
+        batch_size: Annotated[int, Field(gt=0, le=250)] = 100,
         max_points: Annotated[int, Field(gt=0, le=100_000)] = 1000,
         offset: int | str | None = None,
     ) -> CollectionCopyResult:
@@ -197,7 +225,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         layout, then switch an alias with `qdrant_alias_update`.
 
         Each call copies at most `max_points` points, in batches of
-        `batch_size`, so no single call runs long. If the result has
+        `batch_size` (up to 250; lower it for very high-dimensional vectors,
+        since Qdrant rejects a request over 32 MiB), so no single call runs long. If the result has
         `done: false`, call again with the same arguments and
         `offset=next_offset`. Points that already exist in the target under the
         same id are overwritten, so re-running a copy is safe; points that were
@@ -218,6 +247,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 f"`{source_collection}` and `{target_collection}` are the same collection "
                 "(possibly through an alias); a collection can't be copied onto itself."
             )
+        if not await call_qdrant(lambda: client.collection_exists(source_collection)):
+            raise ToolError(f"Source collection `{source_collection}` doesn't exist.")
         if not await call_qdrant(lambda: client.collection_exists(target_collection)):
             raise ToolError(
                 f"Target collection `{target_collection}` doesn't exist: create it first with "
@@ -238,9 +269,13 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                     limit=min(batch_size, max_points - copied),
                 )
             except ToolError as exc:
+                resume = (
+                    f"resume with offset={json.dumps(batch_start)}"
+                    if batch_start is not None
+                    else "start over (no offset)"
+                )
                 raise ToolError(
-                    f"Copy stopped after {copied} points; resume with offset={batch_start!r}. "
-                    f"Qdrant said: {exc}"
+                    f"Copy stopped after {copied} points; {resume}. Qdrant said: {exc}"
                 ) from exc
             copied += page_count
             # An empty page ends the copy even if Qdrant returned a next offset
@@ -312,7 +347,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             index_type = index.data_type.value if index is not None else None
             values = (
                 await facet_top_values(collection_name, key, top_values)
-                if top_values > 0 and index_type in _FACETABLE_INDEX_TYPES
+                if top_values > 0 and index is not None and _can_facet(index)
                 else None
             )
             profiles.append(

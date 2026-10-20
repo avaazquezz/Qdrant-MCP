@@ -62,7 +62,7 @@ finding that shaped a decision (in Spanish).
   grouped queries, recommend, discover, and pairwise distance matrices. Search accuracy knobs
   (`search_params`, `score_threshold`, paging, timeouts) are accepted by every search tool.
 - **Payload & vector editing** — set/overwrite/delete/clear payload, payload indexes, facet
-  counting, named (dense/sparse) vector management, atomic batch operations.
+  counting, named (dense/sparse) vector management, ordered batch operations.
 - **Snapshots** — per-collection and full-storage backup/restore.
 - **Aliases, reindexing & introspection** — switch the collection a name points to without
   downtime, copy points between collections server-side (vectors never pass through the model),
@@ -206,7 +206,7 @@ immediately instead of surfacing later as a confusing tool error.
 | `QDRANT_MCP_SHARED_SECRET` | — | Yes, for `streamable-http` | Bearer token clients must send in the `Authorization` header. |
 | `QDRANT_MCP_HTTP_HOST` | `127.0.0.1` | No | Bind host for `streamable-http`. Use `0.0.0.0` in a container. |
 | `QDRANT_MCP_HTTP_PORT` | `8000` | No | Bind port for `streamable-http`. |
-| `QDRANT_MCP_MAX_LIMIT` | `1000` | No | Largest number of points one tool call may ask for (`limit`, groups' `limit × group_size`, a batch's total, the number of ids, ...). A bigger request is refused with a message saying to page, not silently cut. |
+| `QDRANT_MCP_MAX_LIMIT` | `1000` | No | Largest number of points one tool call may ask for (minimum 30, so every tool's default request fits) (`limit`, groups' `limit × group_size`, a batch's total, the number of ids, ...). A bigger request is refused with a message saying to page, not silently cut. |
 
 ¹ `QDRANT_URL` and `QDRANT_LOCAL_PATH` are mutually exclusive; if neither is set, the client
 falls back to the `qdrant-client` SDK's own default of `localhost:6333`.
@@ -221,7 +221,7 @@ tool at once:
   smoke test. Enough for a fully working MCP on its own.
 - **`search`** — everything beyond plain vector search: batched/grouped queries, recommend,
   discover, and pairwise distance matrices.
-- **`payload`** — payload editing and indexing, named-vector management, atomic batch point
+- **`payload`** — payload editing and indexing, named-vector management, ordered batch point
   operations.
 - **`snapshots`** — collection and full-storage backup/restore.
 - **`observability`** — telemetry, metrics, quotas, and self-diagnosed issues.
@@ -269,7 +269,7 @@ The table below is generated directly from the live tool registry — run
 | `qdrant_payload_index_delete` | `payload` | ❌ | ✅ | ✅ | Delete the payload index on `field_name`. |
 | `qdrant_collection_vector_create` | `payload` | ❌ | ❌ | ✅ | Add a new named vector (dense or sparse) to a collection that already has points, without touching them. |
 | `qdrant_collection_vector_delete` | `payload` | ❌ | ✅ | ✅ | Remove a named vector (dense or sparse) from a collection — points keep their other vectors and payload. |
-| `qdrant_points_batch_update` | `payload` | ❌ | ✅ | ❌ | Run multiple point operations (upsert, delete, set/overwrite/delete/clear payload, update/delete vectors) atomically against one collection, in the order given. |
+| `qdrant_points_batch_update` | `payload` | ❌ | ✅ | ❌ | Run multiple point operations (upsert, delete, set/overwrite/delete/clear payload, update/delete vectors) against one collection, in the order given, in a single request. |
 | `qdrant_vectors_update` | `payload` | ❌ | ✅ | ✅ | Replace the vector(s) of existing points by id — leaves their payload untouched. |
 | `qdrant_vectors_delete` | `payload` | ❌ | ✅ | ✅ | Remove specific named vectors from selected points, keeping their payload and other vectors — exactly one of `ids`/`points_filter`. |
 | `qdrant_alias_list` | `admin` | ✅ | ❌ | ✅ | List every alias on the server with the collection it points to. |
