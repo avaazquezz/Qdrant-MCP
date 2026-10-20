@@ -10,6 +10,7 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
     CountResult,
     Filter,
+    OrderBy,
     PointStruct,
     Record,
     UpdateMode,
@@ -173,13 +174,24 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         offset: int | str | None = None,
         with_payload: bool = True,
         with_vectors: bool = False,
+        order_by: OrderBy | str | None = None,
     ) -> PointsScrollResult:
         """Page through all points in a collection, optionally filtered.
 
         Pass the returned `next_page_offset` as `offset` to fetch the next
         page; `null` means there are no more pages.
 
+        `order_by` sorts by a payload field instead of by id: a key, or
+        `{"key": ..., "direction": "asc"|"desc", "start_from": value}`; the key
+        needs a payload range index (integer, float or datetime). Paging works
+        differently then: `offset` is rejected, and `next_page_offset` is always
+        `null` even when more points remain — to continue, repeat the call with
+        `start_from` set to the last value you received (points tied on that
+        value are returned again, so de-duplicate by id).
+
         Example: {"collection_name": "docs", "limit": 50}
+        Example (newest first): {"collection_name": "docs", "limit": 20,
+            "order_by": {"key": "created_at", "direction": "desc"}}
         """
         records, next_offset = await call_qdrant(
             lambda: client.scroll(
@@ -189,6 +201,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 offset=offset,
                 with_payload=with_payload,
                 with_vectors=with_vectors,
+                order_by=order_by,
             )
         )
         return PointsScrollResult(points=records, next_page_offset=page_offset(next_offset))

@@ -22,6 +22,7 @@ from qdrant_client.http.models import (
     DiscoverQuery,
     Filter,
     GroupsResult,
+    OrderBy,
     QueryRequest,
     QueryResponse,
     RecommendInput,
@@ -29,15 +30,22 @@ from qdrant_client.http.models import (
     RecommendStrategy,
     SearchMatrixOffsetsResponse,
     SearchMatrixPairsResponse,
+    SearchParams,
     VectorInput,
 )
 
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.query_shared import (
-    FusionName,
+    ConsistencyInput,
+    FormulaInput,
+    FusionInput,
     LookupFromInput,
+    MmrInput,
+    OffsetInput,
     PrefetchInput,
+    TimeoutSeconds,
     VectorOrId,
+    build_consistency,
     build_lookup_from,
     build_prefetch_list,
     build_query_value,
@@ -119,26 +127,44 @@ _DISTANCE_MATRIX_OFFSETS_ANNOTATIONS = ToolAnnotations(
 
 class QuerySpec(BaseModel):
     """One item of a `qdrant_query_batch` call — same shape as
-    `qdrant_query`'s parameters, minus `collection_name`."""
+    `qdrant_query`'s parameters, minus `collection_name`, `timeout_seconds` and
+    `consistency` (those apply to the whole batch)."""
 
     query_vector: VectorOrId | None = None
-    fusion: FusionName | None = None
+    fusion: FusionInput | None = None
     prefetch: list[PrefetchInput] | None = None
+    mmr: MmrInput | None = None
+    formula: FormulaInput | None = None
+    order_by: OrderBy | str | None = None
+    sample: Literal["random"] | None = None
     using: str | None = None
     lookup_from: LookupFromInput | None = None
     query_filter: Filter | None = None
+    search_params: SearchParams | None = None
+    score_threshold: float | None = None
     limit: Annotated[int, Field(gt=0)] = 10
+    offset: OffsetInput | None = None
     with_payload: bool = True
     with_vectors: bool = False
 
     def to_request(self) -> QueryRequest:
         return QueryRequest(
-            query=build_query_value(self.query_vector, self.fusion),
+            query=build_query_value(
+                self.query_vector,
+                self.fusion,
+                mmr=self.mmr,
+                formula=self.formula,
+                order_by=self.order_by,
+                sample=self.sample,
+            ),
             using=self.using,
             prefetch=build_prefetch_list(self.prefetch),
             filter=self.query_filter,
+            params=self.search_params,
+            score_threshold=self.score_threshold,
             lookup_from=build_lookup_from(self.lookup_from),
             limit=self.limit,
+            offset=self.offset,
             with_payload=self.with_payload,
             with_vector=self.with_vectors,
         )
@@ -160,7 +186,10 @@ class RecommendSpec(BaseModel):
     lookup_from: LookupFromInput | None = None
     prefetch: list[PrefetchInput] | None = None
     query_filter: Filter | None = None
+    search_params: SearchParams | None = None
+    score_threshold: float | None = None
     limit: Annotated[int, Field(gt=0)] = 10
+    offset: OffsetInput | None = None
     with_payload: bool = True
     with_vectors: bool = False
 
@@ -170,8 +199,11 @@ class RecommendSpec(BaseModel):
             using=self.using,
             prefetch=build_prefetch_list(self.prefetch),
             filter=self.query_filter,
+            params=self.search_params,
+            score_threshold=self.score_threshold,
             lookup_from=build_lookup_from(self.lookup_from),
             limit=self.limit,
+            offset=self.offset,
             with_payload=self.with_payload,
             with_vector=self.with_vectors,
         )
@@ -187,7 +219,10 @@ class DiscoverSpec(BaseModel):
     lookup_from: LookupFromInput | None = None
     prefetch: list[PrefetchInput] | None = None
     query_filter: Filter | None = None
+    search_params: SearchParams | None = None
+    score_threshold: float | None = None
     limit: Annotated[int, Field(gt=0)] = 10
+    offset: OffsetInput | None = None
     with_payload: bool = True
     with_vectors: bool = False
 
@@ -197,8 +232,11 @@ class DiscoverSpec(BaseModel):
             using=self.using,
             prefetch=build_prefetch_list(self.prefetch),
             filter=self.query_filter,
+            params=self.search_params,
+            score_threshold=self.score_threshold,
             lookup_from=build_lookup_from(self.lookup_from),
             limit=self.limit,
+            offset=self.offset,
             with_payload=self.with_payload,
             with_vector=self.with_vectors,
         )
@@ -230,11 +268,16 @@ def _build_discover_query(target: VectorOrId, context: list[ContextPairInput]) -
 
 def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_query_batch(
-        collection_name: str, queries: Annotated[list[QuerySpec], Field(min_length=1)]
+        collection_name: str,
+        queries: Annotated[list[QuerySpec], Field(min_length=1)],
+        timeout_seconds: TimeoutSeconds | None = None,
+        consistency: ConsistencyInput | None = None,
     ) -> list[QueryResponse]:
         """Run multiple independent queries against one collection in a
-        single round trip — same query shapes as `qdrant_query` (plain
-        vector or fusion+prefetch hybrid search), one per list item.
+        single round trip — each item takes every query mode and tuning
+        parameter of `qdrant_query` (plain vector, fusion over prefetch, MMR,
+        formula, order_by, sample, search_params, score_threshold, offset);
+        `timeout_seconds` and `consistency` apply to the whole batch.
 
         Example: {"collection_name": "docs", "queries": [
             {"query_vector": [0.1, 0.2, 0.3, 0.4], "limit": 5},
@@ -243,32 +286,48 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         """
         requests = [q.to_request() for q in queries]
         return await call_qdrant(
-            lambda: client.query_batch_points(collection_name, requests=requests)
+            lambda: client.query_batch_points(
+                collection_name,
+                requests=requests,
+                consistency=build_consistency(consistency),
+                timeout=timeout_seconds,
+            )
         )
 
     async def qdrant_query_groups(
         collection_name: str,
         group_by: str,
         query_vector: VectorOrId | None = None,
-        fusion: FusionName | None = None,
+        fusion: FusionInput | None = None,
         prefetch: list[PrefetchInput] | None = None,
+        mmr: MmrInput | None = None,
+        formula: FormulaInput | None = None,
+        order_by: OrderBy | str | None = None,
+        sample: Literal["random"] | None = None,
         using: str | None = None,
         lookup_from: LookupFromInput | None = None,
         query_filter: Filter | None = None,
+        search_params: SearchParams | None = None,
+        score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         group_size: Annotated[int, Field(gt=0)] = 3,
         with_payload: bool = True,
         with_vectors: bool = False,
         with_lookup: str | None = None,
+        timeout_seconds: TimeoutSeconds | None = None,
+        consistency: ConsistencyInput | None = None,
     ) -> GroupsResult:
         """Vector query grouped by a payload field, up to `group_size` hits
-        per group — e.g. the best-matching chunks per source document. Same
-        query shapes as `qdrant_query`.
+        per group — e.g. the best-matching chunks per source document. Takes
+        every query mode and tuning parameter of `qdrant_query` except
+        `offset` (groups have no paging).
 
         Example: {"collection_name": "docs", "group_by": "document_id",
             "query_vector": [0.1, 0.2, 0.3, 0.4], "group_size": 2}
         """
-        query = build_query_value(query_vector, fusion)
+        query = build_query_value(
+            query_vector, fusion, mmr=mmr, formula=formula, order_by=order_by, sample=sample
+        )
         return await call_qdrant(
             lambda: client.query_points_groups(
                 collection_name,
@@ -277,12 +336,16 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 using=using,
                 prefetch=build_prefetch_list(prefetch),
                 query_filter=query_filter,
+                search_params=search_params,
+                score_threshold=score_threshold,
                 lookup_from=build_lookup_from(lookup_from),
                 limit=limit,
                 group_size=group_size,
                 with_payload=with_payload,
                 with_vectors=with_vectors,
                 with_lookup=with_lookup,
+                timeout=timeout_seconds,
+                consistency=build_consistency(consistency),
             )
         )
 
@@ -295,14 +358,23 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         lookup_from: LookupFromInput | None = None,
         prefetch: list[PrefetchInput] | None = None,
         query_filter: Filter | None = None,
+        search_params: SearchParams | None = None,
+        score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
+        offset: OffsetInput | None = None,
         with_payload: bool = True,
         with_vectors: bool = False,
+        timeout_seconds: TimeoutSeconds | None = None,
+        consistency: ConsistencyInput | None = None,
     ) -> QueryResponse:
         """Find points similar to a set of positive examples and dissimilar
         to a set of negative ones (vectors or point ids) — Qdrant's
         recommendation API. Requires at least one of `positive`/`negative`;
-        the server rejects an empty request with a clear error.
+        the server rejects an empty request with a clear error. Examples may
+        be dense, multi- or sparse vectors, matching `using`.
+
+        Takes the same tuning parameters as `qdrant_query`: `search_params`,
+        `score_threshold`, `offset`, `timeout_seconds`, `consistency`.
 
         Example: {"collection_name": "docs", "positive": [1, 2], "negative": [7]}
         """
@@ -313,18 +385,28 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 using=using,
                 prefetch=build_prefetch_list(prefetch),
                 query_filter=query_filter,
+                search_params=search_params,
+                score_threshold=score_threshold,
                 lookup_from=build_lookup_from(lookup_from),
                 limit=limit,
+                offset=offset,
                 with_payload=with_payload,
                 with_vectors=with_vectors,
+                timeout=timeout_seconds,
+                consistency=build_consistency(consistency),
             )
         )
 
     async def qdrant_recommend_batch(
-        collection_name: str, requests: Annotated[list[RecommendSpec], Field(min_length=1)]
+        collection_name: str,
+        requests: Annotated[list[RecommendSpec], Field(min_length=1)],
+        timeout_seconds: TimeoutSeconds | None = None,
+        consistency: ConsistencyInput | None = None,
     ) -> list[QueryResponse]:
         """Run multiple independent recommend queries against one
-        collection in a single round trip.
+        collection in a single round trip. Each item takes the tuning
+        parameters of `qdrant_recommend`; `timeout_seconds` and `consistency`
+        apply to the whole batch.
 
         Example: {"collection_name": "docs", "requests": [
             {"positive": [1], "negative": [7]},
@@ -332,7 +414,14 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         ]}
         """
         built = [r.to_request() for r in requests]
-        return await call_qdrant(lambda: client.query_batch_points(collection_name, requests=built))
+        return await call_qdrant(
+            lambda: client.query_batch_points(
+                collection_name,
+                requests=built,
+                consistency=build_consistency(consistency),
+                timeout=timeout_seconds,
+            )
+        )
 
     async def qdrant_recommend_groups(
         collection_name: str,
@@ -344,14 +433,19 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         lookup_from: LookupFromInput | None = None,
         prefetch: list[PrefetchInput] | None = None,
         query_filter: Filter | None = None,
+        search_params: SearchParams | None = None,
+        score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         group_size: Annotated[int, Field(gt=0)] = 3,
         with_payload: bool = True,
         with_vectors: bool = False,
         with_lookup: str | None = None,
+        timeout_seconds: TimeoutSeconds | None = None,
+        consistency: ConsistencyInput | None = None,
     ) -> GroupsResult:
         """Recommend query grouped by a payload field, up to `group_size`
-        hits per group.
+        hits per group. Takes the tuning parameters of `qdrant_recommend`
+        except `offset` (groups have no paging).
 
         Example: {"collection_name": "docs", "group_by": "document_id",
             "positive": [1, 2], "group_size": 2}
@@ -364,12 +458,16 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 using=using,
                 prefetch=build_prefetch_list(prefetch),
                 query_filter=query_filter,
+                search_params=search_params,
+                score_threshold=score_threshold,
                 lookup_from=build_lookup_from(lookup_from),
                 limit=limit,
                 group_size=group_size,
                 with_payload=with_payload,
                 with_vectors=with_vectors,
                 with_lookup=with_lookup,
+                timeout=timeout_seconds,
+                consistency=build_consistency(consistency),
             )
         )
 
@@ -381,13 +479,22 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         lookup_from: LookupFromInput | None = None,
         prefetch: list[PrefetchInput] | None = None,
         query_filter: Filter | None = None,
+        search_params: SearchParams | None = None,
+        score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
+        offset: OffsetInput | None = None,
         with_payload: bool = True,
         with_vectors: bool = False,
+        timeout_seconds: TimeoutSeconds | None = None,
+        consistency: ConsistencyInput | None = None,
     ) -> QueryResponse:
         """Rank points by how well they fit a target within positive/negative
         context pairs (vectors or point ids) — Qdrant's discovery search, a
-        finer-grained alternative to recommend.
+        finer-grained alternative to recommend. The target and context may be
+        dense, multi- or sparse vectors, matching `using`.
+
+        Takes the same tuning parameters as `qdrant_query`: `search_params`,
+        `score_threshold`, `offset`, `timeout_seconds`, `consistency`.
 
         Example: {"collection_name": "docs", "target": 1, "context": [
             {"positive": 2, "negative": 7}
@@ -400,25 +507,42 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 using=using,
                 prefetch=build_prefetch_list(prefetch),
                 query_filter=query_filter,
+                search_params=search_params,
+                score_threshold=score_threshold,
                 lookup_from=build_lookup_from(lookup_from),
                 limit=limit,
+                offset=offset,
                 with_payload=with_payload,
                 with_vectors=with_vectors,
+                timeout=timeout_seconds,
+                consistency=build_consistency(consistency),
             )
         )
 
     async def qdrant_discover_batch(
-        collection_name: str, requests: Annotated[list[DiscoverSpec], Field(min_length=1)]
+        collection_name: str,
+        requests: Annotated[list[DiscoverSpec], Field(min_length=1)],
+        timeout_seconds: TimeoutSeconds | None = None,
+        consistency: ConsistencyInput | None = None,
     ) -> list[QueryResponse]:
         """Run multiple independent discover queries against one collection
-        in a single round trip.
+        in a single round trip. Each item takes the tuning parameters of
+        `qdrant_discover`; `timeout_seconds` and `consistency` apply to the
+        whole batch.
 
         Example: {"collection_name": "docs", "requests": [
             {"target": 1, "context": [{"positive": 2, "negative": 7}]}
         ]}
         """
         built = [r.to_request() for r in requests]
-        return await call_qdrant(lambda: client.query_batch_points(collection_name, requests=built))
+        return await call_qdrant(
+            lambda: client.query_batch_points(
+                collection_name,
+                requests=built,
+                consistency=build_consistency(consistency),
+                timeout=timeout_seconds,
+            )
+        )
 
     async def qdrant_distance_matrix_pairs(
         collection_name: str,

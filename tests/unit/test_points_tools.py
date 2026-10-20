@@ -15,9 +15,11 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.http.models import (
     CountResult,
+    Direction,
     FieldCondition,
     Filter,
     MatchValue,
+    OrderBy,
     Record,
     SparseVector,
     UpdateMode,
@@ -241,6 +243,29 @@ async def test_points_scroll_returns_points_and_offset() -> None:
     payload = PointsScrollResult.model_validate(result.structured_content)
     assert payload.next_page_offset == 2
     assert len(payload.points) == 1
+
+
+async def test_points_scroll_forwards_order_by_as_a_key_or_a_spec() -> None:
+    mock = AsyncMock()
+    mock.scroll.return_value = ([], None)
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool("qdrant_points_scroll", {"collection_name": "docs"})
+    assert mock.scroll.call_args.kwargs["order_by"] is None
+
+    await server.call_tool("qdrant_points_scroll", {"collection_name": "docs", "order_by": "price"})
+    assert mock.scroll.call_args.kwargs["order_by"] == "price"
+
+    await server.call_tool(
+        "qdrant_points_scroll",
+        {
+            "collection_name": "docs",
+            "order_by": {"key": "price", "direction": "desc", "start_from": 25},
+        },
+    )
+    assert mock.scroll.call_args.kwargs["order_by"] == OrderBy(
+        key="price", direction=Direction.DESC, start_from=25
+    )
 
 
 async def test_points_scroll_no_more_pages_offset_is_none() -> None:

@@ -82,7 +82,7 @@
   {
     "name": "qdrant_points_scroll",
     "toolset": "core",
-    "description": "Page through all points in a collection, optionally filtered.\n\nPass the returned `next_page_offset` as `offset` to fetch the next page; `null` means there are no more pages.\n\nExample: {\"collection_name\": \"docs\", \"limit\": 50}",
+    "description": "Page through all points in a collection, optionally filtered.\n\nPass the returned `next_page_offset` as `offset` to fetch the next page; `null` means there are no more pages.\n\n`order_by` sorts by a payload field instead of by id: a key, or `{\"key\": ..., \"direction\": \"asc\"|\"desc\", \"start_from\": value}`; the key needs a payload range index (integer, float or datetime). Paging works differently then: `offset` is rejected, and `next_page_offset` is always `null` even when more points remain — to continue, repeat the call with `start_from` set to the last value you received (points tied on that value are returned again, so de-duplicate by id).\n\nExample: {\"collection_name\": \"docs\", \"limit\": 50} Example (newest first): {\"collection_name\": \"docs\", \"limit\": 20, \"order_by\": {\"key\": \"created_at\", \"direction\": \"desc\"}}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -98,7 +98,7 @@
   {
     "name": "qdrant_query",
     "toolset": "core",
-    "description": "Vector similarity search, with optional hybrid search over multiple prefetch stages.\n\nPass `query_vector` for a plain nearest-vector query — a dense vector, a multivector (list of vectors), a sparse vector (`{\"indices\": [...], \"values\": [...]}`), or a point id to reuse an existing point's vector; it must match the vector selected with `using`. Or pass `fusion` + 2+ `prefetch` stages to combine multiple retrieval strategies via Reciprocal Rank Fusion (`fusion=\"rrf\"`) or Distribution-Based Score Fusion (`fusion=\"dbsf\"`) — exactly one of `query_vector`/`fusion` is required. `using` selects a named vector; `lookup_from` resolves `query_vector` from a point id in another collection instead of the current one. Fails with a clear error if the collection doesn't exist.\n\nExample (plain): {\"collection_name\": \"docs\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 5} Example (hybrid): {\"collection_name\": \"docs\", \"fusion\": \"rrf\", \"prefetch\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"using\": \"dense\", \"limit\": 20}, {\"query_vector\": {\"indices\": [1, 7], \"values\": [0.5, 0.2]}, \"using\": \"sparse\", \"limit\": 20} ], \"limit\": 5}",
+    "description": "Search a collection with Qdrant's unified Query API: vector similarity, hybrid fusion, multi-stage reranking, MMR diversity, payload-based score formulas, ordering by a payload field, or random sampling.\n\nExactly one query mode is required: - `query_vector` — nearest points to a dense vector, a multivector (list of vectors), a sparse vector (`{\"indices\": [...], \"values\": [...]}`), or a point id whose stored vector is reused. It must match the vector selected with `using`. Add `mmr` (`diversity` 0..1, `candidates_limit`) to re-order the nearest candidates for diversity: set `candidates_limit` well above `limit` (it defaults to `limit`, which leaves MMR nothing to choose from), and don't page an MMR query with `offset` — it is applied inside the `limit` re-ranked results (`offset` 1 with `limit` 2 returns one point); raise `limit` instead. - `fusion` + 2+ `prefetch` stages — combine retrieval strategies: `\"rrf\"` (Reciprocal Rank Fusion), `\"dbsf\"` (Distribution-Based Score Fusion), or `{\"method\": \"rrf\", \"weights\": [2, 1], \"k\": 60}` for RRF with one weight per stage (a count that doesn't match the stages is rejected by Qdrant). - `formula` — rescore the results of `prefetch` stages (required: a formula without prefetch is rejected). `{\"expression\": ..., \"defaults\": {...}}`. An expression is a number; a variable (`\"$score\"` is the prefetch score, any other string is a payload key); a payload condition (e.g. `{\"key\": \"city\", \"match\": {\"value\": \"sf\"}}`, worth 1 if it matches, else 0); or exactly one operator object: `{\"sum\": [...]}`, `{\"mult\": [...]}`, `{\"neg\": e}`, `{\"abs\": e}`, `{\"div\": {\"left\": e, \"right\": e}}`, `{\"sqrt\": e}`, `{\"pow\": {\"base\": e, \"exponent\": e}}`, `{\"exp\": e}`, `{\"ln\": e}`, `{\"log10\": e}`, `{\"geo_distance\": {\"origin\": {\"lat\": .., \"lon\": ..}, \"to\": \"payload.key\"}}`, `{\"datetime\": \"2026-01-01T00:00:00Z\"}`, `{\"datetime_key\": \"payload.key\"}`, and the decays `{\"exp_decay\" | \"gauss_decay\" | \"lin_decay\": {\"x\": e, \"target\": e, \"scale\": number, \"midpoint\": number}}`. A payload key a point lacks needs a value in `defaults`, or Qdrant rejects the query. - `order_by` — sort by a payload field instead of by similarity: a key or `{\"key\": ..., \"direction\": \"asc\"|\"desc\", \"start_from\": value}`. The key needs a payload range index (integer, float or datetime). - `sample: \"random\"` — random points.\n\nA `prefetch` stage is itself a `query_vector` query or a `fusion` of its own nested `prefetch` stages, so pipelines nest: fuse dense+sparse in one stage, then rerank with a multivector. `using` selects a named vector; `lookup_from` resolves `query_vector` from a point id in another collection.\n\nTuning: `search_params` (`hnsw_ef`, `exact` for brute force, `quantization`: `ignore`/`rescore`/`oversampling`, `indexed_only`, `acorn`), `score_threshold` (drop weaker hits), `limit` + `offset` (paging), `timeout_seconds` (server-side), and `consistency` (a replica count, or `\"majority\"`/`\"quorum\"`/`\"all\"`; only meaningful on a replicated deployment). Fails with a clear error if the collection doesn't exist.\n\nExample (plain): {\"collection_name\": \"docs\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 5} Example (hybrid): {\"collection_name\": \"docs\", \"fusion\": \"rrf\", \"prefetch\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"using\": \"dense\", \"limit\": 20}, {\"query_vector\": {\"indices\": [1, 7], \"values\": [0.5, 0.2]}, \"using\": \"sparse\", \"limit\": 20} ], \"limit\": 5} Example (diverse results): {\"collection_name\": \"docs\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"mmr\": {\"diversity\": 0.5, \"candidates_limit\": 50}, \"limit\": 5} Example (boost one city): {\"collection_name\": \"docs\", \"prefetch\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 50} ], \"formula\": {\"expression\": {\"sum\": [\"$score\", {\"mult\": [0.5, {\"key\": \"city\", \"match\": {\"value\": \"sf\"}}]}]}}, \"limit\": 5} Example (cheapest first): {\"collection_name\": \"docs\", \"order_by\": {\"key\": \"price\", \"direction\": \"asc\"}, \"limit\": 5}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -106,7 +106,7 @@
   {
     "name": "qdrant_query_batch",
     "toolset": "search",
-    "description": "Run multiple independent queries against one collection in a single round trip — same query shapes as `qdrant_query` (plain vector or fusion+prefetch hybrid search), one per list item.\n\nExample: {\"collection_name\": \"docs\", \"queries\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 5}, {\"query_vector\": [0.5, 0.5, 0.5, 0.5], \"limit\": 5} ]}",
+    "description": "Run multiple independent queries against one collection in a single round trip — each item takes every query mode and tuning parameter of `qdrant_query` (plain vector, fusion over prefetch, MMR, formula, order_by, sample, search_params, score_threshold, offset); `timeout_seconds` and `consistency` apply to the whole batch.\n\nExample: {\"collection_name\": \"docs\", \"queries\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 5}, {\"query_vector\": [0.5, 0.5, 0.5, 0.5], \"limit\": 5} ]}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -114,7 +114,7 @@
   {
     "name": "qdrant_query_groups",
     "toolset": "search",
-    "description": "Vector query grouped by a payload field, up to `group_size` hits per group — e.g. the best-matching chunks per source document. Same query shapes as `qdrant_query`.\n\nExample: {\"collection_name\": \"docs\", \"group_by\": \"document_id\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"group_size\": 2}",
+    "description": "Vector query grouped by a payload field, up to `group_size` hits per group — e.g. the best-matching chunks per source document. Takes every query mode and tuning parameter of `qdrant_query` except `offset` (groups have no paging).\n\nExample: {\"collection_name\": \"docs\", \"group_by\": \"document_id\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"group_size\": 2}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -122,7 +122,7 @@
   {
     "name": "qdrant_recommend",
     "toolset": "search",
-    "description": "Find points similar to a set of positive examples and dissimilar to a set of negative ones (vectors or point ids) — Qdrant's recommendation API. Requires at least one of `positive`/`negative`; the server rejects an empty request with a clear error.\n\nExample: {\"collection_name\": \"docs\", \"positive\": [1, 2], \"negative\": [7]}",
+    "description": "Find points similar to a set of positive examples and dissimilar to a set of negative ones (vectors or point ids) — Qdrant's recommendation API. Requires at least one of `positive`/`negative`; the server rejects an empty request with a clear error. Examples may be dense, multi- or sparse vectors, matching `using`.\n\nTakes the same tuning parameters as `qdrant_query`: `search_params`, `score_threshold`, `offset`, `timeout_seconds`, `consistency`.\n\nExample: {\"collection_name\": \"docs\", \"positive\": [1, 2], \"negative\": [7]}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -130,7 +130,7 @@
   {
     "name": "qdrant_recommend_batch",
     "toolset": "search",
-    "description": "Run multiple independent recommend queries against one collection in a single round trip.\n\nExample: {\"collection_name\": \"docs\", \"requests\": [ {\"positive\": [1], \"negative\": [7]}, {\"positive\": [2, 3]} ]}",
+    "description": "Run multiple independent recommend queries against one collection in a single round trip. Each item takes the tuning parameters of `qdrant_recommend`; `timeout_seconds` and `consistency` apply to the whole batch.\n\nExample: {\"collection_name\": \"docs\", \"requests\": [ {\"positive\": [1], \"negative\": [7]}, {\"positive\": [2, 3]} ]}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -138,7 +138,7 @@
   {
     "name": "qdrant_recommend_groups",
     "toolset": "search",
-    "description": "Recommend query grouped by a payload field, up to `group_size` hits per group.\n\nExample: {\"collection_name\": \"docs\", \"group_by\": \"document_id\", \"positive\": [1, 2], \"group_size\": 2}",
+    "description": "Recommend query grouped by a payload field, up to `group_size` hits per group. Takes the tuning parameters of `qdrant_recommend` except `offset` (groups have no paging).\n\nExample: {\"collection_name\": \"docs\", \"group_by\": \"document_id\", \"positive\": [1, 2], \"group_size\": 2}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -146,7 +146,7 @@
   {
     "name": "qdrant_discover",
     "toolset": "search",
-    "description": "Rank points by how well they fit a target within positive/negative context pairs (vectors or point ids) — Qdrant's discovery search, a finer-grained alternative to recommend.\n\nExample: {\"collection_name\": \"docs\", \"target\": 1, \"context\": [ {\"positive\": 2, \"negative\": 7} ]}",
+    "description": "Rank points by how well they fit a target within positive/negative context pairs (vectors or point ids) — Qdrant's discovery search, a finer-grained alternative to recommend. The target and context may be dense, multi- or sparse vectors, matching `using`.\n\nTakes the same tuning parameters as `qdrant_query`: `search_params`, `score_threshold`, `offset`, `timeout_seconds`, `consistency`.\n\nExample: {\"collection_name\": \"docs\", \"target\": 1, \"context\": [ {\"positive\": 2, \"negative\": 7} ]}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -154,7 +154,7 @@
   {
     "name": "qdrant_discover_batch",
     "toolset": "search",
-    "description": "Run multiple independent discover queries against one collection in a single round trip.\n\nExample: {\"collection_name\": \"docs\", \"requests\": [ {\"target\": 1, \"context\": [{\"positive\": 2, \"negative\": 7}]} ]}",
+    "description": "Run multiple independent discover queries against one collection in a single round trip. Each item takes the tuning parameters of `qdrant_discover`; `timeout_seconds` and `consistency` apply to the whole batch.\n\nExample: {\"collection_name\": \"docs\", \"requests\": [ {\"target\": 1, \"context\": [{\"positive\": 2, \"negative\": 7}]} ]}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
