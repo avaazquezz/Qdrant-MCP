@@ -16,18 +16,7 @@ from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedR
 from mcp_qdrant.qdrant_client import qdrant_retry
 
 
-class NoQdrantClientError(RuntimeError):
-    """Raised by BYOQdrantClientProxy when no client is bound to this request.
-
-    Defensive fallback only: BYOQdrantMiddleware already rejects a request
-    with no usable `Authorization` header before any tool runs, so this
-    should never surface in practice.
-    """
-
-
-def _qdrant_error_message(
-    exc: UnexpectedResponse | ResponseHandlingException | NoQdrantClientError,
-) -> str:
+def _qdrant_error_message(exc: UnexpectedResponse | ResponseHandlingException) -> str:
     if isinstance(exc, UnexpectedResponse):
         try:
             return str(exc.structured()["status"]["error"])
@@ -56,5 +45,5 @@ async def call_qdrant[T](coro_factory: Callable[[], Awaitable[T]]) -> T:
 
     try:
         return await _run()
-    except (UnexpectedResponse, ResponseHandlingException, NoQdrantClientError) as exc:
+    except (UnexpectedResponse, ResponseHandlingException) as exc:
         raise ToolError(_qdrant_error_message(exc)) from exc

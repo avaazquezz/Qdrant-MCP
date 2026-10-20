@@ -39,7 +39,6 @@ class Settings(BaseModel):
     shared_secret: str | None = None
     http_host: str = "127.0.0.1"
     http_port: int = 8000
-    byo_qdrant: bool = False
 
     @model_validator(mode="after")
     def _check_single_connection_target(self) -> Settings:
@@ -48,35 +47,11 @@ class Settings(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _check_byo_mode_has_no_fixed_target(self) -> Settings:
-        if self.byo_qdrant and (self.qdrant_url or self.qdrant_local_path):
-            raise ValueError(
-                "QDRANT_MCP_BYO=1 is mutually exclusive with QDRANT_URL/"
-                "QDRANT_LOCAL_PATH: BYO mode has no fixed backing Qdrant — every "
-                "call uses the caller's own, supplied per-request."
-            )
-        return self
-
-    @model_validator(mode="after")
-    def _require_streamable_http_for_byo(self) -> Settings:
-        if self.byo_qdrant and self.transport != "streamable-http":
-            raise ValueError(
-                "QDRANT_MCP_BYO=1 requires QDRANT_MCP_TRANSPORT=streamable-http: "
-                "BYO mode resolves the caller's Qdrant from per-request HTTP "
-                "headers, which stdio has no equivalent of."
-            )
-        return self
-
-    @model_validator(mode="after")
     def _require_shared_secret_for_streamable_http(self) -> Settings:
         # Verified hands-on (a real public tunnel + Claude.ai's own connector
         # UI) that an unauthenticated streamable-http server is trivially
         # usable by anyone with the URL — refuse to start that way silently.
-        # Not required in BYO mode: there is no shared data behind this
-        # instance to protect (isolation comes from each caller's own
-        # Qdrant), and the container's own resource limits already bound
-        # worst-case abuse of the process itself.
-        if self.transport == "streamable-http" and not self.byo_qdrant and not self.shared_secret:
+        if self.transport == "streamable-http" and not self.shared_secret:
             raise ValueError(
                 "QDRANT_MCP_SHARED_SECRET is required when "
                 "QDRANT_MCP_TRANSPORT=streamable-http, to avoid serving an "
@@ -87,6 +62,13 @@ class Settings(BaseModel):
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
         e = env if env is not None else dict(os.environ)
+        # A leftover flag from a v1.1.x deployment must not be silently ignored:
+        # the server would start in a different mode than the operator expects.
+        if _parse_bool(e.get("QDRANT_MCP_BYO")):
+            raise ValueError(
+                "QDRANT_MCP_BYO was removed in v2.0.0 (bring-your-own-Qdrant mode no "
+                "longer exists). Unset it and configure QDRANT_URL or QDRANT_LOCAL_PATH."
+            )
         raw_toolsets = e.get("QDRANT_MCP_TOOLSETS", "core")
         toolsets = tuple(t.strip() for t in raw_toolsets.split(",") if t.strip())
         unknown = sorted(set(toolsets) - set(ALL_TOOLSETS))
@@ -105,7 +87,6 @@ class Settings(BaseModel):
             shared_secret=e.get("QDRANT_MCP_SHARED_SECRET") or None,
             http_host=e.get("QDRANT_MCP_HTTP_HOST", "127.0.0.1"),
             http_port=int(e.get("QDRANT_MCP_HTTP_PORT", "8000")),
-            byo_qdrant=_parse_bool(e.get("QDRANT_MCP_BYO")),
         )
 
 

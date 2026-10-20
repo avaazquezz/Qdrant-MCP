@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-10-20
+
+Fase 10 — the project is a pure MCP server again: no hosted instance, no multi-tenant mode.
+
+### Removed
+- **Breaking:** `QDRANT_MCP_BYO` ("bring your own Qdrant") mode and everything that existed
+  only to support it: `BYOQdrantMiddleware`, `BYOQdrantClientProxy`, `QdrantClientCache`, and
+  the SSRF guard. The server always talks to the single Qdrant configured by `QDRANT_URL` or
+  `QDRANT_LOCAL_PATH`.
+
+### Changed
+- Starting the server with `QDRANT_MCP_BYO` set to a truthy value now fails immediately with an
+  explicit error instead of being silently ignored, so a leftover v1.1.x deployment config can't
+  start in a different mode than its operator expects.
+- `QDRANT_MCP_SHARED_SECRET` is required for every `streamable-http` start (the BYO exemption
+  is gone).
+- `build_server()` no longer accepts a `qdrant_client_cache` argument.
+
 ## [1.1.1] - 2026-09-01
 
 ### Fixed
