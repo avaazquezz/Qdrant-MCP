@@ -26,7 +26,6 @@ from qdrant_client.http.models import (
     OverwritePayloadOperation,
     PointVectors,
     SetPayloadOperation,
-    SparseVector,
     SparseVectorConfig,
     SparseVectorNameConfig,
     UpdateResult,
@@ -37,7 +36,7 @@ from qdrant_client.http.models import (
 )
 
 from mcp_qdrant.tools.errors import call_qdrant
-from mcp_qdrant.tools.points_shared import build_points_selector
+from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector
 from mcp_qdrant.tools.registry import ToolRegistry
 
 BatchOperation = (
@@ -89,14 +88,10 @@ _VECTORS_DELETE_ANNOTATIONS = ToolAnnotations(
 
 
 class PointVectorInput(BaseModel):
-    """A point's vector(s) to replace — never `Document`/`Image`/
-    `InferenceObject` (same rule as `PointInput` in points.py: this server
-    never generates embeddings itself)."""
+    """A point's vector(s) to replace."""
 
     id: int | str
-    vector: (
-        list[float] | list[list[float]] | dict[str, list[float] | SparseVector | list[list[float]]]
-    )
+    vector: PointVectorValue
 
 
 def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:

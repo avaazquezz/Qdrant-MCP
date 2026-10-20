@@ -1,8 +1,9 @@
-"""Points-selector helper shared by every tool that targets points by id list
-or payload filter: `points.py`'s `qdrant_points_delete` (Fase 1) and Fase 3's
-`payload.py` (`set`/`overwrite`/`delete`/`clear`) and `vectors.py`
-(`vectors_delete`). Not a toolset itself — nothing here calls
-`ToolRegistry.register`.
+"""Helpers shared by the point-writing tools: the points-selector used by every
+tool that targets points by id list or payload filter (`points.py`'s
+`qdrant_points_delete` and Fase 3's `payload.py`/`vectors.py`), and the
+`PointVectorValue` type used by every tool that writes a point's vectors
+(`qdrant_points_upsert`, `qdrant_vectors_update`). Not a toolset itself —
+nothing here calls `ToolRegistry.register`.
 """
 
 from __future__ import annotations
@@ -10,7 +11,16 @@ from __future__ import annotations
 from uuid import UUID
 
 from mcp.server.mcpserver.exceptions import ToolError
-from qdrant_client.http.models import Filter, FilterSelector, PointIdsList
+from qdrant_client.http.models import Filter, FilterSelector, PointIdsList, SparseVector
+
+# A point's vector(s): one unnamed dense vector, one unnamed multivector
+# (ColBERT-style), or a dict keyed by vector name whose values are dense,
+# sparse, or multivectors. Never `Document`/`Image`/`InferenceObject`
+# (qdrant-client's server-side embedding inference variants) — this server
+# never generates embeddings itself.
+PointVectorValue = (
+    list[float] | list[list[float]] | dict[str, list[float] | SparseVector | list[list[float]]]
+)
 
 
 def build_points_selector(

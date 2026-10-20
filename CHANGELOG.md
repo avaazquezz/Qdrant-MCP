@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-10-20
+
+Fase 11 — sparse and multivector vectors work end to end. Both gaps below were verified
+hands-on against Qdrant `v1.19.0` before fixing, and break nothing that worked.
+
+### Fixed
+- `qdrant_points_upsert` rejected every point whose vector wasn't a plain `list[float]`, so a
+  collection created with named, sparse or multivectors could not be populated with it (the
+  only way in was `qdrant_points_batch_update`). It now accepts the same vector shapes as
+  `qdrant_vectors_update`: a dense list, a multivector, or a dict of named vectors whose values
+  are dense, sparse (`{"indices": [...], "values": [...]}`) or multivectors.
+- Sparse vectors and multivectors were rejected as query vectors by every query tool, which made
+  dense+sparse hybrid search impossible; the hybrid example in `qdrant_query`'s own docstring
+  failed with `Conversion between sparse and regular vectors failed`. `query_vector`,
+  prefetch stages, and the examples of `qdrant_recommend*` / `qdrant_discover*` /
+  `qdrant_query_batch` / `qdrant_query_groups` now accept all three vector kinds. The docstring
+  example is corrected and covered by an integration test.
+
+### Added
+- `qdrant_points_upsert`: `update_mode` (`upsert` | `insert_only` | `update_only`) for
+  conditional writes, `update_filter` to overwrite only points whose current payload matches,
+  and `wait`.
+
+### Changed
+- An empty vector (`[]` or `[[]]`) is now rejected by the schema in every query tool, not only in
+  `qdrant_query`.
+
 ## [2.0.0] - 2026-10-20
 
 Fase 10 — the project is a pure MCP server again: no hosted instance, no multi-tenant mode.

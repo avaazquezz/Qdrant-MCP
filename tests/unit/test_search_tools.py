@@ -31,6 +31,7 @@ from qdrant_client.http.models import (
     SearchMatrixOffsetsResponse,
     SearchMatrixPair,
     SearchMatrixPairsResponse,
+    SparseVector,
 )
 
 from mcp_qdrant.tools import search as search_tools
@@ -118,6 +119,68 @@ async def test_recommend_builds_recommend_query() -> None:
     assert query.recommend.positive == [1, 2]
     assert query.recommend.negative == [7]
     assert query.recommend.strategy == RecommendStrategy.BEST_SCORE
+
+
+async def test_recommend_accepts_sparse_and_multivector_examples() -> None:
+    mock = AsyncMock()
+    mock.query_points.return_value = QueryResponse(points=[])
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool(
+        "qdrant_recommend",
+        {
+            "collection_name": "docs",
+            "positive": [{"indices": [1, 7], "values": [0.5, 0.2]}],
+            "negative": [[[1.0, 0.0], [0.0, 1.0]]],
+            "using": "sparse",
+        },
+    )
+
+    _, kwargs = mock.query_points.call_args
+    query = kwargs["query"]
+    assert query.recommend.positive == [SparseVector(indices=[1, 7], values=[0.5, 0.2])]
+    assert query.recommend.negative == [[[1.0, 0.0], [0.0, 1.0]]]
+
+
+async def test_discover_accepts_sparse_target_and_context() -> None:
+    mock = AsyncMock()
+    mock.query_points.return_value = QueryResponse(points=[])
+    server = _build(cast(AsyncQdrantClient, mock))
+    sparse = {"indices": [1], "values": [1.0]}
+
+    await server.call_tool(
+        "qdrant_discover",
+        {
+            "collection_name": "docs",
+            "target": sparse,
+            "context": [{"positive": sparse, "negative": {"indices": [4], "values": [1.0]}}],
+            "using": "sparse",
+        },
+    )
+
+    _, kwargs = mock.query_points.call_args
+    query = kwargs["query"]
+    assert query.discover.target == SparseVector(indices=[1], values=[1.0])
+    assert query.discover.context[0].negative == SparseVector(indices=[4], values=[1.0])
+
+
+async def test_query_batch_accepts_sparse_item() -> None:
+    mock = AsyncMock()
+    mock.query_batch_points.return_value = [QueryResponse(points=[])]
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await server.call_tool(
+        "qdrant_query_batch",
+        {
+            "collection_name": "docs",
+            "queries": [
+                {"query_vector": {"indices": [1, 7], "values": [0.5, 0.2]}, "using": "sparse"}
+            ],
+        },
+    )
+
+    _, kwargs = mock.query_batch_points.call_args
+    assert kwargs["requests"][0].query == SparseVector(indices=[1, 7], values=[0.5, 0.2])
 
 
 async def test_recommend_missing_positive_negative_raises_tool_error() -> None:

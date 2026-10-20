@@ -358,7 +358,7 @@ Contenido:
 Huecos a decidir cuando se aborde la fase (no ahora): dominio a usar, y si el copy
 final incluye alguna métrica de adopción (stars, downloads) o se lanza sin ella.
 
-### Fase 10 — `refactor/pure-mcp` → v2.0.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
+### Fase 10 — `refactor/pure-mcp` → v2.0.0 ✅ Mergeada en `main` (PR #31); tag y acciones externas pendientes
 Servidor MCP puro (principio nº4). Se revierte la Fase 8 entera; **breaking** por semver,
 porque `QDRANT_MCP_BYO` salió publicado en v1.1.0.
 
@@ -378,7 +378,7 @@ porque `QDRANT_MCP_BYO` salió publicado en v1.1.0.
       (`mcp-publisher publish`) para que deje de describir el modo BYO.
 - [ ] La landing desplegada sigue anunciando la instancia BYO hasta la Fase 16.
 
-### Fase 11 — `fix/sparse-multivector-io` → v2.1.0
+### Fase 11 — `fix/sparse-multivector-io` → v2.1.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
 Arregla dos huecos que dejan inservible el hybrid search de la Fase 2. **Hallazgos
 verificados en vivo** (2026-10-20, Qdrant `v1.19.0`, no asumidos):
 
@@ -405,6 +405,14 @@ Trabajo:
   `discover*` de golpe).
 - Docstring hybrid corregido + tests de integración reales: upsert dense+sparse+multivector,
   query sparse, hybrid RRF dense+sparse.
+
+**Hallazgos verificados durante la Fase 11** (en vivo, `v1.19.0`):
+- Semántica de las escrituras condicionales, comprobada y fijada en tests de integración:
+  `insert_only` no pisa un id existente, `update_only` no crea uno nuevo, y `update_filter`
+  solo sobrescribe puntos existentes cuyo payload actual cumple el filtro.
+- Al ensanchar la unión con `list[list[float]]`, un `[]` empezó a validar como multivector
+  vacío y llegaba a Qdrant (antes lo cortaba el `min_length` del vector denso). Lo detectó un
+  test unitario; `VectorOrId` acota ahora ambas formas de lista y `[[]]`.
 
 ### Fase 12 — `feat/aliases-and-introspection` → v2.2.0 (toolset `admin`)
 **Corrige una decisión de la Fase 5.** Allí los aliases se descartaron junto al cluster por

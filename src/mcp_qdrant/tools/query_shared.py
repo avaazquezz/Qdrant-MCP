@@ -6,13 +6,29 @@ nothing here calls `ToolRegistry.register`.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import BaseModel
-from qdrant_client.http.models import Filter, Fusion, FusionQuery, LookupLocation, Prefetch
+from pydantic import BaseModel, Field
+from qdrant_client.http.models import (
+    Filter,
+    Fusion,
+    FusionQuery,
+    LookupLocation,
+    Prefetch,
+    SparseVector,
+)
 
-VectorOrId = list[float] | int | str
+# A query/example vector: a dense vector, a multivector (list of vectors,
+# ColBERT-style), a sparse vector ({"indices": [...], "values": [...]}), or a
+# point id whose stored vector is reused. Which one is valid depends on the
+# named vector selected with `using`.
+_DenseVector = Annotated[list[float], Field(min_length=1)]
+# Both list shapes need min_length: an empty `[]` would otherwise validate as an
+# empty multivector (list[list[float]]) and reach Qdrant as a nonsensical query.
+VectorOrId = (
+    _DenseVector | Annotated[list[_DenseVector], Field(min_length=1)] | SparseVector | int | str
+)
 FusionName = Literal["rrf", "dbsf"]
 
 _FUSION_BY_NAME: dict[FusionName, Fusion] = {"rrf": Fusion.RRF, "dbsf": Fusion.DBSF}
