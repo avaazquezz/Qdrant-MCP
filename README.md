@@ -55,8 +55,12 @@ finding that shaped a decision (in Spanish).
 
 - **Full collection & point lifecycle** — create/update/delete collections, CRUD on points,
   scrolling, counting.
-- **Every Qdrant search mode** — plain vector search, hybrid search (RRF/DBSF fusion with
-  prefetch stages), grouped queries, recommend, discover, and pairwise distance matrices.
+- **Every Qdrant search mode** — plain vector search over dense, sparse and multivectors,
+  hybrid search (RRF — optionally weighted — and DBSF fusion), nested multi-stage prefetch
+  (fuse dense+sparse, then rerank with a multivector), MMR diversity, custom score formulas
+  (payload boosts, recency and geo decay), ordering by a payload field, random sampling,
+  grouped queries, recommend, discover, and pairwise distance matrices. Search accuracy knobs
+  (`search_params`, `score_threshold`, paging, timeouts) are accepted by every search tool.
 - **Payload & vector editing** — set/overwrite/delete/clear payload, payload indexes, facet
   counting, named (dense/sparse) vector management, atomic batch operations.
 - **Snapshots** — per-collection and full-storage backup/restore.
@@ -241,8 +245,8 @@ The table below is generated directly from the live tool registry — run
 | `qdrant_points_delete` | `core` | ❌ | ✅ | ✅ | Delete points by id list or by payload filter — exactly one of the two. |
 | `qdrant_points_scroll` | `core` | ✅ | ❌ | ✅ | Page through all points in a collection, optionally filtered. |
 | `qdrant_points_count` | `core` | ✅ | ❌ | ✅ | Count points in a collection, optionally matching a filter. |
-| `qdrant_query` | `core` | ✅ | ❌ | ✅ | Vector similarity search, with optional hybrid search over multiple prefetch stages. |
-| `qdrant_query_batch` | `search` | ✅ | ❌ | ✅ | Run multiple independent queries against one collection in a single round trip — same query shapes as `qdrant_query` (plain vector or fusion+prefetch hybrid search), one per list item. |
+| `qdrant_query` | `core` | ✅ | ❌ | ✅ | Search a collection with Qdrant's unified Query API: vector similarity, hybrid fusion, multi-stage reranking, MMR diversity, payload-based score formulas, ordering by a payload field, or random sampling. |
+| `qdrant_query_batch` | `search` | ✅ | ❌ | ✅ | Run multiple independent queries against one collection in a single round trip — each item takes every query mode and tuning parameter of `qdrant_query` (plain vector, fusion over prefetch, MMR, formula, order_by, sample, search_params, score_threshold, offset); `timeout_seconds` and `consistency` apply to the whole batch. |
 | `qdrant_query_groups` | `search` | ✅ | ❌ | ✅ | Vector query grouped by a payload field, up to `group_size` hits per group — e.g. the best-matching chunks per source document. |
 | `qdrant_recommend` | `search` | ✅ | ❌ | ✅ | Find points similar to a set of positive examples and dissimilar to a set of negative ones (vectors or point ids) — Qdrant's recommendation API. |
 | `qdrant_recommend_batch` | `search` | ✅ | ❌ | ✅ | Run multiple independent recommend queries against one collection in a single round trip. |

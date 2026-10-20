@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-10-20
+
+Fase 14 — the unified Query API, fully exposed. Every mode and parameter below was verified
+hands-on against Qdrant `v1.19.0` before being documented; several behaviors that would
+otherwise surprise a caller are written into the tool descriptions and pinned by integration tests.
+
+### Added
+- `qdrant_query` (and `qdrant_query_batch` items, `qdrant_query_groups`) new query modes:
+  `formula` (rescore prefetch results with payload boosts, recency/geo decay, arithmetic),
+  `mmr` (diversity), `order_by` (sort by a payload field), `sample: "random"`, and weighted
+  RRF via `fusion: {"method": "rrf", "weights": [...], "k": ...}`. Exactly one query mode per call.
+- Nested prefetch: a `prefetch` stage can now be a `fusion` of its own `prefetch` stages (any
+  depth), so pipelines like "fuse dense+sparse, then rerank with a multivector" are expressible.
+  Stages also take `search_params` and `score_threshold`.
+- Tuning parameters on every `query_points`-based tool — `qdrant_query`, `_batch`, `_groups`,
+  `qdrant_recommend*`, `qdrant_discover*`: `search_params` (`hnsw_ef`, `exact`, `quantization`,
+  `indexed_only`, `acorn`), `score_threshold`, `offset` (not on `_groups`), `timeout_seconds` and
+  `consistency` (on batch tools these two apply to the whole batch).
+- `qdrant_points_scroll`: `order_by`.
+
+### Changed
+- `PrefetchInput.query_vector` is now optional (a stage may be a fusion instead).
+- `qdrant_query`'s annotation title is now "Query Qdrant".
+- The "exactly one of" error for a missing/ambiguous query mode now lists all five modes.
+
+### Notes for callers (documented in the tools)
+- `formula` requires `prefetch`, and a payload key a point lacks needs a value in
+  `formula.defaults`. Its `expression` is validated server-side, with one readable error instead
+  of Pydantic's ~100 union errors.
+- `mmr` re-ranks only `limit` candidates unless `candidates_limit` is set higher, and `offset`
+  applies inside those `limit` results rather than paging past them.
+- With `order_by` on scroll, `offset` is rejected and `next_page_offset` is always `null`; page
+  with `order_by.start_from` instead.
+
 ## [2.3.0] - 2026-10-20
 
 Fase 13 — two composite operations in the `admin` toolset. Both are deterministic code over data

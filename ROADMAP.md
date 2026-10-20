@@ -446,7 +446,7 @@ funcionan `collection_cluster_info` (shards locales, puntos, estado) y `get_opti
   resumen y optimizaciones en curso; `queued`/`completed`/`idle_segments` solo salen por la
   capa REST (`client.http.collections_api`), que es la que usa la tool.
 
-### Fase 13 — `feat/server-side-composites` → v2.3.0 (toolset `admin`; depende de la Fase 11) 🚧 Implementada en la rama, pendiente de PR/merge/tag
+### Fase 13 — `feat/server-side-composites` → v2.3.0 (toolset `admin`; depende de la Fase 11) ✅ Cerrada (PR #34, tag `v2.3.0`)
 Operaciones compuestas donde **los vectores no pasan por el contexto del LLM**. Código
 determinista, sin embeddings: compatible con el principio nº1.
 
@@ -473,7 +473,7 @@ determinista, sin embeddings: compatible con el principio nº1.
   claves de `payload_schema` usan la sintaxis `a.b` y `a[].b`; `schema_infer` genera las
   mismas, para que lo que informa se pueda pegar tal cual en un filtro o un índice.
 
-### Fase 14 — `feat/query-power` → v2.4.0
+### Fase 14 — `feat/query-power` → v2.4.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
 `qdrant_query` expone hoy solo `Nearest` (vector literal o id) + `Fusion` (RRF/DBSF), con un
 único nivel de prefetch. El modelo de `qdrant-client==1.19.x` (introspección directa) tiene
 10 tipos de query y `query_points` acepta más parámetros de los que se pasan.
@@ -488,12 +488,45 @@ determinista, sin embeddings: compatible con el principio nº1.
   concreto — decidir al abordar la fase.
 - `qdrant_points_scroll` gana `order_by`.
 - Cada modo se verifica en vivo antes de documentarlo (p. ej. si exige índice de payload).
+- Decidido al abordar: los parámetros de ajuste (`search_params`, `score_threshold`, `offset`,
+  `timeout_seconds`, `consistency`) se aceptan en **todas** las tools basadas en
+  `query_points` (query, recommend, discover y sus variantes batch/groups), no solo en
+  `qdrant_query`; los modos nuevos (`formula`, `mmr`, `order_by`, `sample`, RRF ponderado) en
+  `qdrant_query`, `_batch` y `_groups`. `RelevanceFeedbackQuery` y `ContextQuery` **no** se
+  implementan: no hay caso de uso concreto. El argumento se llama `timeout_seconds` (no
+  `timeout`): lo exige ruff (ASYNC109) y además aclara que es un timeout del servidor.
+
+**Hallazgos verificados durante la Fase 14** (en vivo, `v1.19.0`):
+- **MMR no hace nada por defecto.** `candidates_limit` vale `limit`, así que con `limit` 2 el
+  resultado es idéntico al de una query normal; hay que subirlo (con 10 sí promueve el punto
+  disimilar). Además `offset` se aplica *dentro* de los `limit` resultados reordenados:
+  `offset` 1 con `limit` 2 devuelve 1 punto y `offset` 2 devuelve vacío. Se documenta en la
+  tool y un test lo fija.
+- **`formula` exige `prefetch`** (`cannot apply Formula without prefetches`); una clave de
+  payload ausente sin valor en `defaults` falla con un error claro. La gramática `Expression`
+  pesa 35 KB de JSON Schema: se tipa de forma laxa (`dict | float | str`) y se valida en el
+  servidor, y como un `ValidationError` de Pydantic sobre esa unión trae ~100 errores, se
+  condensa en un único mensaje. Un `{}` valida como `Expression` (es un `Filter` vacío).
+- **Pesos de RRF**: siguen el orden de las etapas (verificado con etapas disjuntas; con
+  empates de score los resultados engañan) y su número debe coincidir con el de etapas.
+- **`order_by`** exige un índice de payload de rango (float/integer/datetime): sin él responde
+  400 "No range index". En scroll, `order_by` rechaza `offset` y `next_page_offset` es siempre
+  `null`; se pagina con `start_from` (los empates en ese valor se repiten).
+- `consistency` y `timeout` se aceptan en un nodo único (no tienen efecto observable).
+- **Peso de los schemas**: la fase añade ~6,5 KB por tool de query; el catálogo completo pasa
+  de 513 KB a 571 KB de `inputSchema` y `core` solo ya son 149 KB. No es nuevo (cada tool
+  incluye su propia copia del schema de `Filter`, ~16 KB), pero queda como trabajo de la Fase 15.
 
 ### Fase 15 — `feat/response-limits` → v2.5.0
 - `limit` en `qdrant_query`/`qdrant_points_scroll`/etc. solo exige `> 0`: un `limit=100000`
   vuelca la colección entera al contexto del LLM. `QDRANT_MCP_MAX_LIMIT` acota `limit` en todas
   las tools que paginan. Valor por defecto a decidir al abordar (propuesta: 1000); es un cambio
   de comportamiento, se documenta en el CHANGELOG.
+- **Peso de los schemas** (medido en la Fase 14: `core` = 149 KB de `inputSchema` para 13 tools,
+  catálogo completo = 571 KB; cada tool arrastra su propia copia del schema de `Filter`, ~16 KB).
+  Es contexto que el cliente MCP carga en cada conversación. Medir por tool, reducir lo evitable
+  sin quitar capacidad, y dejar un test de presupuesto que falle si `core` crece por encima de
+  un umbral — para que no vuelva a crecer sin que nadie lo note.
 
 ### Fase 16 — `feat/landing-technical` (sin bump de semver del paquete)
 Rediseño completo de `/website` (decidido 2026-10-20): de landing de un servicio a
