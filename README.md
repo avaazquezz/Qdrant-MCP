@@ -24,7 +24,6 @@ vector editing, snapshots, and server observability. Not just `store`/`find`.
 - [Connecting to Claude](#connecting-to-claude)
   - [Claude Desktop / Claude Code (local, stdio)](#claude-desktop--claude-code-local-stdio)
   - [Remote (streamable-http)](#remote-streamable-http)
-  - [Bring your own Qdrant (`QDRANT_MCP_BYO`)](#bring-your-own-qdrant-qdrant_mcp_byo)
 - [Configuration Reference](#configuration-reference)
 - [Available Tools](#available-tools)
 - [Read-Only Mode](#read-only-mode)
@@ -66,8 +65,6 @@ finding that shaped a decision (in Spanish).
 - **Opt-in tool surface** — tools are grouped into toolsets you enable explicitly, so a client
   isn't handed 60+ overlapping tools by default.
 - **Read-only guard** — one flag removes every mutating tool from the registry entirely.
-- **Bring-your-own-Qdrant mode** — run a public endpoint with no database of your own; every
-  caller supplies their own Qdrant, isolated by construction, protected by an SSRF guard.
 - **Resilient by default** — every Qdrant call goes through retry-with-backoff and returns
   Qdrant's own error message on failure, never a generic exception.
 
@@ -181,94 +178,6 @@ real account): enter the server's HTTPS URL, then on the detected authentication
 (`Authorization` is used here because it's one of the two header names Claude.ai's
 custom-connector UI accepts without requiring Anthropic's manual approval of a custom name.)
 
-### Bring your own Qdrant (`QDRANT_MCP_BYO`)
-
-A `streamable-http` deployment can run with **no backing Qdrant of its own** — every caller
-supplies their *own* Qdrant instance (their own Qdrant Cloud account, their company's
-self-hosted Qdrant, whatever) per request, instead of using one the operator hosts and pays for.
-Isolation between callers is automatic — each one talks to their own database — so there's no
-shared secret, no per-user account, and no data at rest on this server.
-
-```bash
-QDRANT_MCP_BYO=1 \
-QDRANT_MCP_TRANSPORT=streamable-http \
-QDRANT_MCP_HTTP_HOST=0.0.0.0 \
-mcp-qdrant
-```
-
-Two request headers, reused for a different purpose than their name suggests — verified
-hands-on that Claude.ai's custom-connector "Request headers" UI rejects made-up header names
-outright unless Anthropic has approved them, so this reuses two pre-approved ones instead of
-inventing `X-Qdrant-Url`/`X-Qdrant-Api-Key`:
-
-- `Authorization` (**required**) — your Qdrant URL, e.g. `https://xyz.cloud.qdrant.io:6333`.
-  Sent verbatim, no `Bearer` prefix (unlike the personal-instance mode above, which uses the
-  same header for a shared secret).
-- `x-api-key` (optional) — your Qdrant API key, if your instance needs one.
-
-In Claude.ai: **Add custom connector** → authentication **"None"** → add both as **Request
-headers**. Your Qdrant must be reachable from the public internet — see
-[Security](#security) for what the SSRF guard rejects.
-
-**How it works, under the hood:** every tool resolves its Qdrant client lazily, at call time,
-rather than once at startup. In BYO mode that client is a `BYOQdrantClientProxy` that reads the
-real `AsyncQdrantClient` from a `contextvars.ContextVar`, set per-request by the auth
-middleware — so none of the tool implementations need to know BYO mode exists. Clients are
-pooled in a bounded LRU cache (256 entries, keyed by URL + API key) so repeat callers don't pay
-a fresh TLS handshake on every call, with a 15-second grace period before an evicted client is
-closed so an in-flight request is never cut off mid-call.
-
-#### Recommended setup: one MCP deployment, one Qdrant per project
-
-This is the most common way to run this project: deploy the MCP **once**, in BYO mode, as a
-long-lived service — then, for each new project, spin up your own Qdrant and point a connector
-at it, without ever touching the MCP deployment again.
-
-1. **Deploy the MCP once**, self-hosted (e.g. Docker behind a reverse proxy with TLS), in BYO
-   mode as shown above. This never changes between projects.
-2. **Per project, run your own Qdrant** with `docker-compose`, protected with its own API key
-   ([`QDRANT__SERVICE__API_KEY`](https://qdrant.tech/documentation/guides/security/) — Qdrant's
-   own auth, unrelated to this server):
-
-   ```yaml
-   services:
-     qdrant:
-       image: qdrant/qdrant:latest
-       restart: unless-stopped
-       environment:
-         QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
-       volumes:
-         - ./qdrant_storage:/qdrant/storage
-   ```
-
-   All data for that project lives in `./qdrant_storage`, on your own server — the MCP
-   deployment never stores or sees it beyond relaying each request.
-3. **Expose that Qdrant under its own public HTTPS domain** (e.g. via Traefik/Let's Encrypt) —
-   the SSRF guard rejects private/internal addresses, so it must be reachable from the public
-   internet, not just from inside your server's Docker network.
-4. **Add one connector per project**, pointing at the same MCP deployment but with different
-   headers:
-   - **Claude.ai**: a separate custom connector per project — `Authorization` = that project's
-     Qdrant URL, `x-api-key` = its API key.
-   - **Claude Code** (`.mcp.json`, remote HTTP server with custom headers):
-     ```json
-     {
-       "mcpServers": {
-         "qdrant-project-x": {
-           "type": "http",
-           "url": "https://your-mcp.example.com/mcp",
-           "headers": {
-             "Authorization": "https://qdrant-project-x.example.com",
-             "x-api-key": "${QDRANT_PROJECT_X_API_KEY}"
-           }
-         }
-       }
-     }
-     ```
-
-Adding a project is then just a new `docker-compose up` for its Qdrant plus a new connector —
-the MCP deployment itself is never redeployed or restarted.
-
 ## Configuration Reference
 
 All configuration is via environment variables, read once at startup — a misconfiguration fails
@@ -282,17 +191,12 @@ immediately instead of surfacing later as a confusing tool error.
 | `QDRANT_MCP_READ_ONLY` | `false` | No | Removes every tool not marked read-only from the registry. See [Read-Only Mode](#read-only-mode). |
 | `QDRANT_MCP_TRANSPORT` | `stdio` | No | `stdio` (local, for Claude Desktop/Code) or `streamable-http` (network). |
 | `QDRANT_MCP_TOOLSETS` | `core` | No | Comma-separated list of toolsets to register. See [Available Tools](#available-tools). |
-| `QDRANT_MCP_SHARED_SECRET` | — | Required for `streamable-http` unless BYO² | Bearer token clients must send in the `Authorization` header. |
+| `QDRANT_MCP_SHARED_SECRET` | — | Yes, for `streamable-http` | Bearer token clients must send in the `Authorization` header. |
 | `QDRANT_MCP_HTTP_HOST` | `127.0.0.1` | No | Bind host for `streamable-http`. Use `0.0.0.0` in a container. |
 | `QDRANT_MCP_HTTP_PORT` | `8000` | No | Bind port for `streamable-http`. |
-| `QDRANT_MCP_BYO` | `false` | No | Enables [bring-your-own-Qdrant mode](#bring-your-own-qdrant-qdrant_mcp_byo). |
 
 ¹ `QDRANT_URL` and `QDRANT_LOCAL_PATH` are mutually exclusive; if neither is set, the client
 falls back to the `qdrant-client` SDK's own default of `localhost:6333`.
-² In BYO mode the shared secret is optional — it adds an extra anti-bot gate on top of the
-per-caller isolation BYO already provides, rather than protecting shared data. BYO mode also
-requires `QDRANT_MCP_TRANSPORT=streamable-http` and is mutually exclusive with
-`QDRANT_URL`/`QDRANT_LOCAL_PATH` (there is nothing "backing" to point at).
 
 ## Available Tools
 
@@ -381,9 +285,8 @@ your database, set the flag, and there is no code path left for it to write anyt
 
 ## Architecture
 
-- **Single shared client.** One `AsyncQdrantClient` (or, in BYO mode, a proxy — see below) is
-  built once at startup and closed over by every tool. Tools resolve it lazily at call time
-  rather than caching anything from it at registration.
+- **Single shared client.** One `AsyncQdrantClient` is built once at startup and closed over
+  by every tool.
 - **One registration choke point.** Every tool module calls into a single `ToolRegistry`, which
   is where the toolset filter and the read-only guard are both enforced — a tool can't bypass
   either by registering itself differently.
@@ -394,26 +297,16 @@ your database, set the flag, and there is no code path left for it to write anyt
 - **`stdio`-safe logging.** All logging goes to `stderr`, configured before the MCP server
   object is even constructed — writing to `stdout` under the `stdio` transport would corrupt the
   JSON-RPC message framing.
-- **BYO mode's indirection.** In `QDRANT_MCP_BYO` mode, the "client" every tool holds is a proxy
-  that reads the real, per-caller `AsyncQdrantClient` out of a context variable set by request
-  middleware — see [Bring your own Qdrant](#bring-your-own-qdrant-qdrant_mcp_byo) for the full
-  mechanism.
 
 ## Security
 
-- **Mandatory authentication for the personal `streamable-http` mode.** The server refuses to
-  start without `QDRANT_MCP_SHARED_SECRET` — verified hands-on that an unauthenticated instance
-  is trivially usable by anyone with the URL.
-- **SSRF protection in BYO mode.** Since a BYO deployment connects to whatever URL an untrusted
-  public caller supplies — from a host that may also run other services on internal networks —
-  every URL is checked before use: only `http`/`https`, DNS-resolved, and rejected if any
-  resolved address is private, loopback, link-local, or the cloud metadata address. This check
-  **re-resolves on every request** rather than caching a prior result, specifically to defeat DNS
-  rebinding.
+- **Mandatory authentication for `streamable-http`.** The server refuses to start without
+  `QDRANT_MCP_SHARED_SECRET` — verified hands-on that an unauthenticated instance is trivially
+  usable by anyone with the URL.
 - **Input validation everywhere.** Every tool's input is a Pydantic model — malformed input is
   rejected with a structured error before it reaches the Qdrant SDK.
-- **No secrets at rest, no secrets logged.** BYO mode holds no long-lived credentials; API keys
-  passed via `x-api-key` live only as long as their pooled client connection.
+- **Read-only guard.** `QDRANT_MCP_READ_ONLY` removes every mutating tool from the registry —
+  see [Read-Only Mode](#read-only-mode).
 
 ## Development
 
