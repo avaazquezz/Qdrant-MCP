@@ -564,7 +564,7 @@ completo y **150 KB** para el toolset `core` por defecto.
 - `mypy` estricto exige `types-jsonschema` para los tests (se añade como dependencia de desarrollo);
   `jsonschema` en sí ya es dependencia dura de `mcp`.
 
-### Fase 15b — `fix/review-hardening` → v2.6.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
+### Fase 15b — `fix/review-hardening` → v2.6.0 ✅ Cerrada (PR #37, tag `v2.6.0`)
 Revisión independiente del código de las Fases 11–15: un segundo lector sin contexto de mi
 razonamiento, con la orden de **reproducir y no especular**. Cada hallazgo se volvió a reproducir
 contra un Qdrant `v1.19.0` real antes de arreglarlo.
@@ -603,7 +603,7 @@ fija; las anteriores a la Fase 12 no se han revisado una a una.
   `mmr`/`formula`/`order_by`/`sample`/`lookup_from` no se pueden expresar. Es una limitación de
   capacidad, no una regresión; ahora el error lo dice con claridad.
 
-### Fase 16 — `feat/landing-technical` (sin bump de semver del paquete)
+### Fase 16 — `feat/landing-technical` (sin bump de semver del paquete) ✅ Cerrada
 Rediseño completo de `/website` (decidido 2026-10-20): de landing de un servicio a
 **landing técnica para quien evalúa el proyecto** (reclutadores/equipos técnicos). Debe
 explicar cómo funciona el proyecto de forma completa, fácil, interactiva y muy animada.
@@ -624,6 +624,26 @@ explicar cómo funciona el proyecto de forma completa, fácil, interactiva y muy
   `npm install --legacy-peer-deps`.
 - El brief puede abrirse ya; el copy final de casos de uso espera a la Fase 13 para mostrar
   las tools de reindex.
+
+**Resultado** (✅ Cerrada, sin tag: no cambia el paquete):
+- Concepto «el instrumento que mide»: una hoja de datos viva donde cada cifra sale del repo.
+  Bilingüe EN `/` y ES `/es/` (prerender estático), CTA único = abrir el repositorio.
+- **Nada a mano.** `scripts/gen_site_stats.py` (versión, tools, tests, KB de schemas, releases) y
+  `scripts/record_scenarios.py` (ejecuta tools reales contra un Qdrant real y graba cada llamada y
+  respuesta) generan los JSON que consume la web; ambos tienen `--check` en CI. La bitácora de
+  ingeniería enlaza PRs y versiones reales.
+- Secciones: hero con campo vectorial (distancias calculadas en el navegador), banda de cifras,
+  método, arquitectura con el paquete JSON-RPC real viajando por los cinco saltos (pin solo en
+  escritorio), 4 escenarios reproducibles, explorador de las 56 tools, instalación con generador
+  de `.mcp.json`, bitácora, calidad, FAQ, contacto.
+- Medido en local (sin red, así que LCP es optimista): FCP 116 ms, LCP 1,0 s, CLS 0,025, sin tareas
+  largas, ≤64 ms por interacción, 180 KB de JS comprimido. Contraste AA en todos los pares de
+  texto. Probado a 375 px (se corrigieron un desbordamiento horizontal por columnas de rejilla
+  implícitas y un solape en las tarjetas de arquitectura), con teclado (skip link, foco visible)
+  y con `prefers-reduced-motion` simulado (sin pin, sin Lenis, todo el contenido visible).
+- Pendiente fuera del repo: dominio y `NUXT_PUBLIC_SITE_URL` (sin él no hay canonical, hreflang,
+  `og:url` ni sitemap, a propósito), publicar la nueva imagen del contenedor, desmontar la
+  instancia pública antigua.
 
 ## Versionado
 
