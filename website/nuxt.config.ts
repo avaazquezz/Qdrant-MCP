@@ -12,15 +12,15 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      // Where the site is hosted, e.g. https://example.com — set NUXT_PUBLIC_SITE_URL at
-      // build time. Left empty, canonical / hreflang / Open Graph URLs are omitted instead
-      // of pointing at an address nobody chose.
-      siteUrl: '',
+      // Where the site is hosted. Canonical, hreflang, Open Graph URLs, the sitemap and
+      // robots.txt all derive from it. NUXT_PUBLIC_SITE_URL overrides it at build time
+      // (e.g. for a preview host); set it empty and those tags are omitted.
+      siteUrl: 'https://vazquezdev.pro',
     },
   },
   // Two static pages, one per language. The language switcher links between them, so the
   // crawler would find both; listing them keeps the build independent of that.
-  nitro: { prerender: { routes: ['/', '/es/'] } },
+  nitro: { prerender: { routes: ['/', '/es/', '/sitemap.xml', '/robots.txt'] } },
   // The page has no client-side navigation to prefetch for.
   experimental: { payloadExtraction: false },
   typescript: { typeCheck: true },

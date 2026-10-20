@@ -457,7 +457,7 @@ const en: Copy = {
       },
       {
         q: 'How was it built?',
-        a: 'With Claude Code as a pair programmer; the commits carry its Co-Authored-By trailer. What is not delegated is the direction, the principles in the roadmap and the verification discipline above: nothing is claimed until it has been run, and the review that found the worst bug was designed to distrust the code.',
+        a: 'With AI assistance (Claude Code), and the commits say so with a Co-Authored-By trailer. The assistant does not decide what is true: that is decided by tests against a real Qdrant, by scenarios CI re-records on every push, and by a review designed to distrust the code, which reproduced real defects. All of it is in the log above.',
       },
       {
         q: 'Which Qdrant versions does it support?',
@@ -787,7 +787,7 @@ const es: Copy = {
       },
       {
         q: '¿Cómo se construyó?',
-        a: 'Con Claude Code como pareja de programación; los commits llevan su trailer Co-Authored-By. Lo que no se delega es la dirección, los principios del roadmap y la disciplina de verificación de arriba: nada se afirma hasta que se ha ejecutado, y la revisión que encontró el peor fallo se diseñó para desconfiar del código.',
+        a: 'Con ayuda de IA (Claude Code), y los commits lo dicen con el trailer Co-Authored-By. El asistente no decide qué es verdad: lo deciden los tests contra un Qdrant real, los escenarios que CI vuelve a grabar en cada push y una revisión diseñada para desconfiar del código, que reprodujo fallos reales. Todo está en la bitácora de arriba.',
       },
       {
         q: '¿Qué versiones de Qdrant soporta?',
