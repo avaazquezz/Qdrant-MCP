@@ -3,8 +3,13 @@
 Servidor MCP que expone **toda la superficie útil de la API de Qdrant** (colecciones,
 points, búsqueda, indexing, snapshots, observabilidad), no solo `store`/`find`
 como el servidor oficial (`qdrant/mcp-server-qdrant`, 2 tools). No cubre administración
-de cluster (Fase 5, descartada — ver más abajo): requiere Qdrant distribuido y su
-funcionalidad más relevante (resharding real) es exclusiva de Qdrant Cloud.
+de cluster distribuido (Fase 5, descartada — ver más abajo): requiere Qdrant distribuido y
+su funcionalidad más relevante (resharding real) es exclusiva de Qdrant Cloud. Sí cubre la
+administración que funciona en un solo nodo (aliases, introspección — Fase 12).
+
+**Posicionamiento (decidido 2026-10-20):** proyecto de portfolio dirigido a quien evalúe el
+trabajo (reclutadores, equipos técnicos), no un servicio. El repo publica código, paquete e
+imagen; **no opera ninguna instancia pública** ni aloja datos de terceros.
 
 ## Principios (no negociables)
 
@@ -18,6 +23,9 @@ funcionalidad más relevante (resharding real) es exclusiva de Qdrant Cloud.
 3. **Cobertura antes que atajos.** El catálogo de tools de este roadmap está sacado del
    índice oficial de la API de Qdrant (`api.qdrant.tech`, comprobado 2026-08-26), no de
    memoria — si Qdrant añade/renombra endpoints, el roadmap se actualiza, no se inventa.
+4. **Servidor MCP puro, no servicio.** Nada de multi-tenancy, instancias públicas ni
+   infraestructura propia que mantener. Quien quiera exponerlo por red se autoaloja
+   `streamable-http` con su secreto compartido; el proyecto no lo opera por nadie.
 
 ## Decisiones de arquitectura
 
@@ -37,7 +45,7 @@ funcionalidad más relevante (resharding real) es exclusiva de Qdrant Cloud.
 | Testing | `pytest` (unit con client mockeado + integración contra Qdrant real vía Docker, versión mínima soportada fijada en CI), `ruff`, `mypy`, `pre-commit` |
 | CI | GitHub Actions: lint + typecheck + tests en cada PR |
 | Doc de tools | Generada automáticamente desde los schemas Pydantic (script + check en CI) a partir de la Fase 7 — no se mantiene a mano |
-| Landing page | Fase 9, tras v1.0.0. Vive en `/website`, fuera del paquete Python que se publica en PyPI/Docker. Desplegada en infra propia (Hetzner + Traefik). Dominio: pendiente de decidir al abordar la fase |
+| Landing page | Fase 9 (primera versión) y Fase 16 (rediseño técnico para reclutadores). Vive en `/website`, fuera del paquete Python que se publica en PyPI/Docker. Escaparate técnico, no página de un servicio |
 
 ## Flujo de Git
 
@@ -278,7 +286,12 @@ desde aquí):
       (no se ha hecho: reintroduciría la fragilidad multi-plataforma que el tipo
       `"uv"` evita a propósito).
 
-### Fase 8 — `feat/byo-public-instance` → v1.1.0 ✅ Cerrada
+### Fase 8 — `feat/byo-public-instance` → v1.1.0 ⛔ Revertida en la Fase 10 (v2.0.0)
+> **Histórico.** Esta fase se cerró y se publicó (v1.1.0/v1.1.1), y después se revirtió
+> entera por el principio nº4 (servidor MCP puro, no servicio) — ver Fase 10. El texto de
+> abajo se conserva porque los hallazgos (cabeceras preaprobadas de Claude.ai, SSRF,
+> `contextvars`) siguen siendo ciertos, no porque el código exista.
+
 Segundo modo de despliegue, sin tools nuevas: un `streamable-http` público donde el
 operador no aloja ningún dato. Motivación: abrir el servidor a que lo use cualquiera
 ("como un MCP cualquiera") sin asumir el almacenamiento de terceros ni construir un
@@ -322,7 +335,7 @@ El código de la instancia personal (secreto compartido + Qdrant fijo) permanece
 repo sin cambios — sigue siendo un modo válido para quien se autoaloje el proyecto con
 su propia base de datos; simplemente ya no es el que corre en este servidor.
 
-### Fase 9 — `feat/landing-page` (post v1.0.0, sin bump de semver del paquete)
+### Fase 9 — `feat/landing-page` (post v1.0.0, sin bump de semver del paquete) — primera versión; rehecha en la Fase 16
 Landing de marketing del producto. Vive en `/website`, build independiente del paquete
 Python, desplegada en infra propia (Hetzner + Traefik) siguiendo el mismo patrón que el
 resto de proyectos. Se construye al final, con el producto ya cerrado, para no rehacer
@@ -345,6 +358,129 @@ Contenido:
 Huecos a decidir cuando se aborde la fase (no ahora): dominio a usar, y si el copy
 final incluye alguna métrica de adopción (stars, downloads) o se lanza sin ella.
 
+### Fase 10 — `refactor/pure-mcp` → v2.0.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
+Servidor MCP puro (principio nº4). Se revierte la Fase 8 entera; **breaking** por semver,
+porque `QDRANT_MCP_BYO` salió publicado en v1.1.0.
+
+- Se eliminan `byo_auth.py`, `byo_qdrant.py`, `qdrant_client_cache.py`, `ssrf_guard.py`, sus
+  tests, y el cableado en `cli.py`/`server.py`/`config.py`/`tools/errors.py`
+  (`NoQdrantClientError`). Se **conserva** `streamable-http` + `QDRANT_MCP_SHARED_SECRET`
+  (obligatorio siempre, sin la excepción BYO) y la imagen Docker.
+- `QDRANT_MCP_BYO` con valor verdadero **falla al arrancar** con un error explícito en vez de
+  ignorarse: un despliegue v1.1.x con la variable olvidada arrancaría en un modo distinto del
+  que su operador cree.
+- README sin la sección BYO, ni el SSRF guard en Seguridad. CHANGELOG `2.0.0`.
+
+**Acciones externas** (no automatizables desde el repo, a cargo del propietario):
+- [ ] Desmontar la instancia pública `mcp-qdrant.vazquezlabs.com` (contenedor, router
+      Traefik, registro DNS).
+- [ ] Tag `v2.0.0` → publica PyPI/GHCR/`.mcpb`; reeditar la entrada del MCP Registry
+      (`mcp-publisher publish`) para que deje de describir el modo BYO.
+- [ ] La landing desplegada sigue anunciando la instancia BYO hasta la Fase 16.
+
+### Fase 11 — `fix/sparse-multivector-io` → v2.1.0
+Arregla dos huecos que dejan inservible el hybrid search de la Fase 2. **Hallazgos
+verificados en vivo** (2026-10-20, Qdrant `v1.19.0`, no asumidos):
+
+- `qdrant_points_upsert` solo acepta `vector: list[float]`: una colección creada con
+  `vectors`/`sparse_vectors` (Fase 3) **no se puede poblar** con la tool principal —
+  `{"dense": [...], "sparse": {...}}` falla en la validación Pydantic; un `list[float]`
+  suelto contra una colección con vectores con nombre falla en el servidor (`Not existing
+  vector name`). El único camino hoy es `qdrant_points_batch_update`, que sí funciona
+  (probado) pero un LLM no lo descubre solo.
+- `VectorOrId = list[float] | int | str` no admite `SparseVector` ni multivectores: una
+  query sparse se rechaza en el schema, y el ejemplo hybrid del docstring de `qdrant_query`
+  (`"query_vector": [0.5, 0.5], "using": "sparse"`) falla en el servidor con `Conversion
+  between sparse and regular vectors failed`. El servidor sí soporta dense+sparse con RRF
+  (probado con el cliente crudo): el hueco es solo del schema de este proyecto. Los únicos
+  tests con "sparse" en búsqueda son unitarios con cliente mockeado.
+
+Trabajo:
+- `PointInput.vector` pasa a aceptar el mismo tipo que `PointVectorInput` (`vectors.py`):
+  `list[float] | list[list[float]] | dict[str, list[float] | SparseVector | list[list[float]]]`.
+- `qdrant_points_upsert` gana `wait`, `update_mode` (`upsert`/`insert_only`/`update_only`) y
+  `update_filter` (upserts condicionales) — presentes en la firma de `qdrant-client==1.19.x`.
+- `VectorOrId` y `PrefetchInput.query_vector` aceptan `SparseVector` y `list[list[float]]`
+  (un solo tipo compartido: arregla `qdrant_query`, `_batch`, `_groups`, `recommend*`,
+  `discover*` de golpe).
+- Docstring hybrid corregido + tests de integración reales: upsert dense+sparse+multivector,
+  query sparse, hybrid RRF dense+sparse.
+
+### Fase 12 — `feat/aliases-and-introspection` → v2.2.0 (toolset `admin`)
+**Corrige una decisión de la Fase 5.** Allí los aliases se descartaron junto al cluster por
+"solo tener sentido en modo distribuido"; verificado en vivo (2026-10-20, single-node
+`v1.19.0`) que **no es cierto para aliases**: crear y listar un alias funciona. También
+funcionan `collection_cluster_info` (shards locales, puntos, estado) y `get_optimizations`
+(optimizaciones en curso/en cola/idle). Lo que **sigue descartado**: shard keys
+(`PUT /collections/{c}/shards` → 405; `GET /cluster` → `disabled` fuera de modo cluster).
+
+- `qdrant_alias_list`, `qdrant_collection_aliases`, `qdrant_alias_update` (lista de
+  operaciones create/delete/rename aplicadas **atómicamente** — base del reindex sin
+  downtime).
+- `qdrant_collection_cluster_info`, `qdrant_collection_optimizations` ("¿ha terminado de
+  indexar?", "¿por qué está en amarillo?").
+- `qdrant_collection_create` gana `hnsw_config`, `optimizers_config`, `on_disk_payload`
+  (hoy solo ajustables después con `_update`, y `on_disk_payload` no se puede fijar).
+- El toolset `admin` deja de ser un nombre reservado vacío: README y `config.py` se
+  actualizan.
+
+### Fase 13 — `feat/server-side-composites` → v2.3.0 (toolset `admin`; depende de la Fase 11)
+Operaciones compuestas donde **los vectores no pasan por el contexto del LLM**. Código
+determinista, sin embeddings: compatible con el principio nº1.
+
+- `qdrant_collection_copy`: copia paginada y **reanudable** (devuelve `next_offset`; el LLM
+  repite la llamada) de una colección a otra de la misma instancia, con filtro opcional y
+  `batch_size`. Idempotente (usa upsert). Combinada con `qdrant_alias_update`: crear colección
+  nueva con otra distancia/cuantización/HNSW → copiar → cambiar el alias.
+- `qdrant_payload_schema_infer`: muestrea N puntos y devuelve, por clave de payload, tipos
+  observados, si está indexada y, para campos con índice keyword, los valores más frecuentes
+  (vía facet). Evita el fallo más común de un LLM con Qdrant: inventarse claves en los filtros.
+- Pendiente de decidir al abordar: tamaño de muestra por defecto y tope de `batch_size`.
+
+### Fase 14 — `feat/query-power` → v2.4.0
+`qdrant_query` expone hoy solo `Nearest` (vector literal o id) + `Fusion` (RRF/DBSF), con un
+único nivel de prefetch. El modelo de `qdrant-client==1.19.x` (introspección directa) tiene
+10 tipos de query y `query_points` acepta más parámetros de los que se pasan.
+
+- Parámetros: `search_params` (`hnsw_ef`, `exact`, `quantization`, `indexed_only`, `acorn`),
+  `score_threshold`, `offset`, `timeout`, `consistency`.
+- Prefetch **anidado** (rerank multietapa) y `params`/`score_threshold` por etapa.
+- Nuevos modos como argumento discriminado **dentro de `qdrant_query`** (no tools nuevas:
+  más tools solapadas empeoran la elección del LLM): `formula` (boost de score por
+  payload/geo/fecha, con `defaults`), `mmr` (diversidad), `order_by`, `sample` (aleatorio) y
+  RRF con pesos. `RelevanceFeedbackQuery` y `ContextQuery`: solo si aparece un caso de uso
+  concreto — decidir al abordar la fase.
+- `qdrant_points_scroll` gana `order_by`.
+- Cada modo se verifica en vivo antes de documentarlo (p. ej. si exige índice de payload).
+
+### Fase 15 — `feat/response-limits` → v2.5.0
+- `limit` en `qdrant_query`/`qdrant_points_scroll`/etc. solo exige `> 0`: un `limit=100000`
+  vuelca la colección entera al contexto del LLM. `QDRANT_MCP_MAX_LIMIT` acota `limit` en todas
+  las tools que paginan. Valor por defecto a decidir al abordar (propuesta: 1000); es un cambio
+  de comportamiento, se documenta en el CHANGELOG.
+
+### Fase 16 — `feat/landing-technical` (sin bump de semver del paquete)
+Rediseño completo de `/website` (decidido 2026-10-20): de landing de un servicio a
+**landing técnica para quien evalúa el proyecto** (reclutadores/equipos técnicos). Debe
+explicar cómo funciona el proyecto de forma completa, fácil, interactiva y muy animada.
+
+- **Fuera:** todo lo que venda o conecte con la instancia pública/BYO (copy, comando de
+  conexión remota, enlaces al dominio de la instancia); `app.vue`, `InstallPaths.vue`,
+  `robots.txt` y `sitemap.xml` hoy la mencionan.
+- **Dentro:** documentación interactiva del catálogo de tools (generada desde el registro
+  vivo, como `scripts/gen_tools_json.py`, nunca a mano); casos de uso reales encadenando
+  tools (hybrid search, reindex sin downtime con copy + alias, auditoría de payload);
+  arquitectura de integración (cliente MCP → `ToolRegistry` como punto único de toolsets y
+  read-only → `call_qdrant` con retry → Qdrant); decisiones y hallazgos verificados (el
+  propio ROADMAP es el material); CI/tests/cobertura como señales de calidad.
+- Método: skill `landing-page-motion` — discovery y brief cerrados **antes** de construir;
+  GSAP + Lenis sobre Nuxt, respetando `prefers-reduced-motion`, Core Web Vitals y
+  accesibilidad.
+- Operativa: siempre vía el contenedor Docker `qdrant-mcp-website` (nunca `npm run dev`),
+  `npm install --legacy-peer-deps`.
+- El brief puede abrirse ya; el copy final de casos de uso espera a la Fase 13 para mostrar
+  las tools de reindex.
+
 ## Versionado
 
 | Versión | Fase cerrada |
@@ -356,8 +492,15 @@ final incluye alguna métrica de adopción (stars, downloads) o se lanza sin ell
 | — | 5 — descartada (cluster/admin, requiere Qdrant distribuido; resharding real es Cloud-only) |
 | v0.6.0 | 6 — observabilidad |
 | v1.0.0 | 7 — endurecido, documentado, publicable |
-| v1.1.0 | 8 — instancia pública "bring your own Qdrant" |
-| — | 9 — landing page, sin versión de paquete, deploy propio |
+| v1.1.0 | 8 — instancia pública "bring your own Qdrant" (revertida en v2.0.0) |
+| — | 9 — landing page, sin versión de paquete, deploy propio (rehecha en la Fase 16) |
+| v2.0.0 | 10 — servidor MCP puro, sin modo BYO (breaking) |
+| v2.1.0 | 11 — escritura/consulta sparse y multivector |
+| v2.2.0 | 12 — aliases e introspección (`admin`) |
+| v2.3.0 | 13 — operaciones server-side: copy, schema infer (`admin`) |
+| v2.4.0 | 14 — potencia de query |
+| v2.5.0 | 15 — límites de respuesta |
+| — | 16 — landing técnica, sin versión de paquete |
 
 ---
 *Catálogo de endpoints verificado contra `api.qdrant.tech/master/llms.txt` y el README de
