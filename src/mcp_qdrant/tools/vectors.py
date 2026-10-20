@@ -19,7 +19,6 @@ from qdrant_client.http.models import (
     DenseVectorConfig,
     DenseVectorNameConfig,
     Distance,
-    Filter,
     Modifier,
     MultiVectorComparator,
     MultiVectorConfig,
@@ -38,6 +37,7 @@ from qdrant_client.http.models import (
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector
 from mcp_qdrant.tools.registry import ToolRegistry
+from mcp_qdrant.tools.schemas import BatchOperationsSchema, FilterInput
 
 BatchOperation = (
     UpsertOperation
@@ -163,7 +163,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         )
 
     async def qdrant_points_batch_update(
-        collection_name: str, operations: Annotated[list[BatchOperation], Field(min_length=1)]
+        collection_name: str,
+        operations: Annotated[list[BatchOperation], Field(min_length=1), BatchOperationsSchema],
     ) -> list[UpdateResult]:
         """Run multiple point operations (upsert, delete,
         set/overwrite/delete/clear payload, update/delete vectors)
@@ -203,7 +204,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         collection_name: str,
         vector_names: Annotated[list[str], Field(min_length=1)],
         ids: list[int | str] | None = None,
-        points_filter: Filter | None = None,
+        points_filter: FilterInput | None = None,
     ) -> UpdateResult:
         """Remove specific named vectors from selected points, keeping
         their payload and other vectors — exactly one of

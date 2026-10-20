@@ -473,7 +473,7 @@ determinista, sin embeddings: compatible con el principio nº1.
   claves de `payload_schema` usan la sintaxis `a.b` y `a[].b`; `schema_infer` genera las
   mismas, para que lo que informa se pueda pegar tal cual en un filtro o un índice.
 
-### Fase 14 — `feat/query-power` → v2.4.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
+### Fase 14 — `feat/query-power` → v2.4.0 ✅ Cerrada (PR #35, tag `v2.4.0`)
 `qdrant_query` expone hoy solo `Nearest` (vector literal o id) + `Fusion` (RRF/DBSF), con un
 único nivel de prefetch. El modelo de `qdrant-client==1.19.x` (introspección directa) tiene
 10 tipos de query y `query_points` acepta más parámetros de los que se pasan.
@@ -517,16 +517,52 @@ determinista, sin embeddings: compatible con el principio nº1.
   de 513 KB a 571 KB de `inputSchema` y `core` solo ya son 149 KB. No es nuevo (cada tool
   incluye su propia copia del schema de `Filter`, ~16 KB), pero queda como trabajo de la Fase 15.
 
-### Fase 15 — `feat/response-limits` → v2.5.0
-- `limit` en `qdrant_query`/`qdrant_points_scroll`/etc. solo exige `> 0`: un `limit=100000`
-  vuelca la colección entera al contexto del LLM. `QDRANT_MCP_MAX_LIMIT` acota `limit` en todas
-  las tools que paginan. Valor por defecto a decidir al abordar (propuesta: 1000); es un cambio
-  de comportamiento, se documenta en el CHANGELOG.
-- **Peso de los schemas** (medido en la Fase 14: `core` = 149 KB de `inputSchema` para 13 tools,
-  catálogo completo = 571 KB; cada tool arrastra su propia copia del schema de `Filter`, ~16 KB).
-  Es contexto que el cliente MCP carga en cada conversación. Medir por tool, reducir lo evitable
-  sin quitar capacidad, y dejar un test de presupuesto que falle si `core` crece por encima de
-  un umbral — para que no vuelva a crecer sin que nadie lo note.
+### Fase 15 — `feat/response-limits` → v2.5.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
+Menos contexto y sin inundaciones accidentales. Medido antes de tocar nada (Fase 14): los
+`inputSchema` que el cliente carga en el contexto del modelo eran **571 KB** para el catálogo
+completo y **150 KB** para el toolset `core` por defecto.
+
+- **`QDRANT_MCP_MAX_LIMIT`** (por defecto 1000; también en el formulario del `.mcpb`): tope de
+  resultados por llamada. Se aplica a `limit` (query, recommend, discover, scroll, facet), a
+  `limit × group_size` (tools `_groups`), a la suma de los items de un batch, a `sample × limit`
+  (matrices de distancia) y al número de ids de `qdrant_points_get`. Una petición mayor se
+  **rechaza con un error explícito** (dice qué era demasiado grande y que hay que paginar) en
+  vez de recortarse en silencio: un recorte le daría al modelo menos resultados de los que cree
+  haber recibido. Un valor inválido (0, negativo, no entero) falla al arrancar. Vive en
+  `ToolRegistry.check_limit`, el mismo punto único donde ya se aplican toolsets y read-only.
+  Cambio de comportamiento (peticiones de más de 1000 resultados dejan de funcionar), anotado
+  en el CHANGELOG.
+- **Schemas compactos** (`tools/schemas.py`): `Filter`, `SearchParams`, la lista de operaciones
+  de `qdrant_points_batch_update` y los modelos de configuración (HNSW, optimizador, strict
+  mode, cuantización, parámetros de vectores, tipos de índice de payload) anuncian un schema
+  reducido con `pydantic.WithJsonSchema`. Solo cambia lo **anunciado**: la tool sigue recibiendo y
+  validando el modelo real de Qdrant, así que lo que se acepta y se rechaza es idéntico. Para
+  `Filter`, `SearchParams` y las operaciones, un resumen escrito a mano con la gramática de
+  condiciones en la descripción; para los modelos de configuración, `slim_schema` parte del
+  schema real, inlinea los `$ref` y quita solo la prosa (`title`/`description`/`default: null`),
+  de modo que no hay texto a mano que se desfase. Resultado: **160 KB** el catálogo completo
+  (−72 %) y **44 KB** `core` (−71 %).
+- **Presupuesto en los tests**: `core`, catálogo completo y tool individual tienen un límite de
+  bytes que falla si el schema vuelve a crecer; además, tests de paridad (el schema anunciado
+  acepta y rechaza las mismas muestras que el modelo real, validado con `jsonschema`), de
+  no-deriva (cada campo de condición, `match` y operación del `qdrant-client` instalado aparece en
+  la gramática escrita a mano), y de que todos los `$ref` de todas las tools resuelven.
+
+**Hallazgos verificados durante la Fase 15:**
+- El peso estaba en la documentación embebida: `description` ≈ 36 % y los `$defs` de `Filter` y
+  sus condiciones ≈ 250 KB repartidos por las tools (cada tool lleva su propia copia).
+- **Primer borrador del schema de `Filter` incorrecto, corregido antes de publicar**: anunciaba
+  `must`/`should`/`must_not` solo como lista, pero el modelo acepta *una lista o una única
+  condición*; un cliente que validara contra el schema habría rechazado una llamada legal. Un test
+  de paridad lo cubre ahora.
+- El SDK de MCP ignora el metadato `Annotated` de un tipo de retorno `BaseModel` y no ofrece
+  forma pública de fijar el `inputSchema` de una tool, así que la reducción va por tipo de
+  parámetro. Los `outputSchema` (≈ 309 KB, sobre todo `CollectionInfo` y la telemetría) **no** se
+  tocan: la API de mensajes de Anthropic solo recibe `name`, `description` e `input_schema` por
+  herramienta, así que no cuestan contexto `[SIN VERIFICAR]` en cada cliente MCP; verificarlo
+  antes de optimizarlos.
+- `mypy` estricto exige `types-jsonschema` para los tests (se añade como dependencia de desarrollo);
+  `jsonschema` en sí ya es dependencia dura de `mcp`.
 
 ### Fase 16 — `feat/landing-technical` (sin bump de semver del paquete)
 Rediseño completo de `/website` (decidido 2026-10-20): de landing de un servicio a

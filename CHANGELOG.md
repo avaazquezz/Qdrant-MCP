@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-10-20
+
+Fase 15 — less context, no accidental floods. Measured before touching anything: the `tools/list`
+input schemas the client loads into the model's context were 571 KB for the whole catalog and
+150 KB for the default `core` toolset (every tool carries its own copy of Qdrant's ~16 KB `Filter`
+schema and of the configuration models).
+
+### Added
+- `QDRANT_MCP_MAX_LIMIT` (default 1000, also a field in the `.mcpb` settings form): the largest
+  number of results one call may request. Applies to `limit` on `qdrant_query`, `qdrant_recommend`,
+  `qdrant_discover` and `qdrant_points_scroll`; to `limit × group_size` on the `_groups` tools; to
+  the total over a batch's items; to `sample × limit` on the distance-matrix tools; to `limit` on
+  `qdrant_payload_facet`; and to the number of ids in `qdrant_points_get`. A larger request is
+  **refused with an explicit error** (it says what was too big and to page) instead of being
+  clamped, so the model never receives fewer results than it believes it got. An invalid value
+  (`0`, negative, not an integer) fails at startup.
+- A schema size budget in the test suite (default toolset, whole catalog, single tool) so the
+  weight can't creep back unnoticed, plus tests that the compact schemas accept and reject exactly
+  what Qdrant's real models do and cannot drift from the installed `qdrant-client`.
+
+### Changed
+- **Behavior:** a call asking for more than 1000 results (or the configured cap) is now rejected.
+  Page with `offset` / `next_page_offset`, or raise `QDRANT_MCP_MAX_LIMIT`.
+- The advertised input schemas are compact: ~160 KB for the whole catalog (was 571 KB) and ~44 KB for
+  `core` (was 150 KB). Only what is *advertised* changed — tools still receive and validate the real
+  Qdrant models, so accepted and rejected inputs are identical. `Filter` and `SearchParams` are
+  summarized by a hand-written schema whose condition grammar is in the parameter description (a
+  test checks it against the installed `qdrant-client`); the configuration models
+  (`HnswConfigDiff`, `OptimizersConfigDiff`, `StrictModeConfig`, quantization, vector params, payload
+  index types) are generated from the real schema with only the prose removed.
+- `types-jsonschema` added to the dev dependencies (used by the schema tests).
+
 ## [2.4.0] - 2026-10-20
 
 Fase 14 — the unified Query API, fully exposed. Every mode and parameter below was verified

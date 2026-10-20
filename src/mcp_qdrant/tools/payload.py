@@ -5,15 +5,15 @@ named-vector operations).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from mcp_types import ToolAnnotations
+from pydantic import WithJsonSchema
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
     BoolIndexParams,
     DatetimeIndexParams,
     FacetResponse,
-    Filter,
     FloatIndexParams,
     GeoIndexParams,
     IntegerIndexParams,
@@ -27,8 +27,9 @@ from qdrant_client.http.models import (
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.points_shared import build_points_selector
 from mcp_qdrant.tools.registry import ToolRegistry
+from mcp_qdrant.tools.schemas import FilterInput, slim_schema
 
-PayloadIndexSchema = (
+_PAYLOAD_INDEX_TYPES = (
     PayloadSchemaType
     | KeywordIndexParams
     | IntegerIndexParams
@@ -39,6 +40,9 @@ PayloadIndexSchema = (
     | DatetimeIndexParams
     | UuidIndexParams
 )
+PayloadIndexSchema = Annotated[
+    _PAYLOAD_INDEX_TYPES, WithJsonSchema(slim_schema(_PAYLOAD_INDEX_TYPES))
+]
 
 _SET_ANNOTATIONS = ToolAnnotations(
     title="Set Qdrant payload fields",
@@ -96,7 +100,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         collection_name: str,
         payload: dict[str, Any],
         ids: list[int | str] | None = None,
-        points_filter: Filter | None = None,
+        points_filter: FilterInput | None = None,
         key: str | None = None,
     ) -> UpdateResult:
         """Merge fields into the payload of selected points — exactly one of
@@ -115,7 +119,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         collection_name: str,
         payload: dict[str, Any],
         ids: list[int | str] | None = None,
-        points_filter: Filter | None = None,
+        points_filter: FilterInput | None = None,
     ) -> UpdateResult:
         """Replace the entire payload of selected points with `payload` —
         exactly one of `ids`/`points_filter`. Unlike `qdrant_payload_set`,
@@ -132,7 +136,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         collection_name: str,
         keys: list[str],
         ids: list[int | str] | None = None,
-        points_filter: Filter | None = None,
+        points_filter: FilterInput | None = None,
     ) -> UpdateResult:
         """Delete specific payload keys from selected points — exactly one
         of `ids`/`points_filter`. Other keys are untouched.
@@ -147,7 +151,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_payload_clear(
         collection_name: str,
         ids: list[int | str] | None = None,
-        points_filter: Filter | None = None,
+        points_filter: FilterInput | None = None,
     ) -> UpdateResult:
         """Wipe the entire payload of selected points, keeping their
         vectors — exactly one of `ids`/`points_filter`.
@@ -162,7 +166,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_payload_facet(
         collection_name: str,
         key: str,
-        facet_filter: Filter | None = None,
+        facet_filter: FilterInput | None = None,
         limit: int = 10,
         exact: bool = False,
     ) -> FacetResponse:
@@ -172,6 +176,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
         Example: {"collection_name": "docs", "key": "city", "limit": 20}
         """
+        registry.check_limit(limit)
         return await call_qdrant(
             lambda: client.facet(
                 collection_name, key=key, facet_filter=facet_filter, limit=limit, exact=exact

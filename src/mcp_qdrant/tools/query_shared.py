@@ -12,7 +12,6 @@ from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from qdrant_client.http.models import (
     Expression,
-    Filter,
     FormulaQuery,
     Fusion,
     FusionQuery,
@@ -28,9 +27,10 @@ from qdrant_client.http.models import (
     RrfQuery,
     Sample,
     SampleQuery,
-    SearchParams,
     SparseVector,
 )
+
+from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput
 
 _DenseVector = Annotated[list[float], Field(min_length=1)]
 # A query/example vector: a dense vector, a multivector (list of vectors,
@@ -100,8 +100,8 @@ class PrefetchInput(BaseModel):
     fusion: FusionInput | None = None
     prefetch: list[PrefetchInput] | None = None
     using: str | None = None
-    query_filter: Filter | None = None
-    search_params: SearchParams | None = None
+    query_filter: FilterInput | None = None
+    search_params: SearchParamsInput | None = None
     score_threshold: float | None = None
     limit: int | None = None
 
