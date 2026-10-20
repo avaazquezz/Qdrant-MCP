@@ -1,0 +1,748 @@
+{
+  "recorded_with": {
+    "mcp_qdrant": "2.6.0",
+    "qdrant": "1.19.0"
+  },
+  "scenarios": [
+    {
+      "id": "hybrid-search",
+      "steps": [
+        {
+          "tool": "qdrant_collection_create",
+          "arguments": {
+            "collection_name": "demo_articles",
+            "vectors": {
+              "dense": {
+                "size": 4,
+                "distance": "Cosine"
+              }
+            },
+            "sparse_vectors": {
+              "sparse": {}
+            }
+          },
+          "ok": true,
+          "result": {
+            "status": "green",
+            "points_count": 0,
+            "vectors": {
+              "dense": {
+                "size": 4,
+                "distance": "Cosine"
+              }
+            },
+            "hnsw_m": 16,
+            "sparse_vectors": [
+              "sparse"
+            ]
+          }
+        },
+        {
+          "tool": "qdrant_points_upsert",
+          "arguments": {
+            "collection_name": "demo_articles",
+            "points": [
+              {
+                "id": 1,
+                "vector": {
+                  "dense": [
+                    0.9,
+                    0.1,
+                    0.1,
+                    0.0
+                  ],
+                  "sparse": {
+                    "indices": [
+                      1,
+                      8
+                    ],
+                    "values": [
+                      1.0,
+                      1.0
+                    ]
+                  }
+                },
+                "payload": {
+                  "title": "Reset your password"
+                }
+              },
+              {
+                "id": 2,
+                "vector": {
+                  "dense": [
+                    0.1,
+                    0.9,
+                    0.1,
+                    0.0
+                  ],
+                  "sparse": {
+                    "indices": [
+                      2,
+                      8
+                    ],
+                    "values": [
+                      1.0,
+                      0.4
+                    ]
+                  }
+                },
+                "payload": {
+                  "title": "Rotate API keys"
+                }
+              },
+              {
+                "id": 3,
+                "vector": {
+                  "dense": [
+                    0.0,
+                    0.1,
+                    0.9,
+                    0.1
+                  ],
+                  "sparse": {
+                    "indices": [
+                      3
+                    ],
+                    "values": [
+                      1.0
+                    ]
+                  }
+                },
+                "payload": {
+                  "title": "Invoice and billing FAQ"
+                }
+              },
+              {
+                "id": 4,
+                "vector": {
+                  "dense": [
+                    0.8,
+                    0.3,
+                    0.0,
+                    0.3
+                  ],
+                  "sparse": {
+                    "indices": [
+                      4,
+                      1
+                    ],
+                    "values": [
+                      1.0,
+                      0.3
+                    ]
+                  }
+                },
+                "payload": {
+                  "title": "Set up single sign-on"
+                }
+              },
+              {
+                "id": 5,
+                "vector": {
+                  "dense": [
+                    0.1,
+                    0.1,
+                    0.2,
+                    0.9
+                  ],
+                  "sparse": {
+                    "indices": [
+                      5,
+                      7
+                    ],
+                    "values": [
+                      1.0,
+                      0.3
+                    ]
+                  }
+                },
+                "payload": {
+                  "title": "Export your data"
+                }
+              },
+              {
+                "id": 6,
+                "vector": {
+                  "dense": [
+                    0.3,
+                    0.0,
+                    0.1,
+                    0.8
+                  ],
+                  "sparse": {
+                    "indices": [
+                      6,
+                      7,
+                      1
+                    ],
+                    "values": [
+                      1.0,
+                      1.0,
+                      0.2
+                    ]
+                  }
+                },
+                "payload": {
+                  "title": "Delete your account"
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "result": {
+            "status": "completed"
+          }
+        },
+        {
+          "tool": "qdrant_query",
+          "arguments": {
+            "collection_name": "demo_articles",
+            "query_vector": [
+              0.85,
+              0.2,
+              0.0,
+              0.2
+            ],
+            "using": "dense",
+            "limit": 3
+          },
+          "ok": true,
+          "result": {
+            "hits": [
+              {
+                "id": 4,
+                "title": "Set up single sign-on",
+                "score": 0.9862
+              },
+              {
+                "id": 1,
+                "title": "Reset your password",
+                "score": 0.9619
+              },
+              {
+                "id": 6,
+                "title": "Delete your account",
+                "score": 0.5385
+              }
+            ]
+          }
+        },
+        {
+          "tool": "qdrant_query",
+          "arguments": {
+            "collection_name": "demo_articles",
+            "query_vector": {
+              "indices": [
+                1,
+                8
+              ],
+              "values": [
+                1.0,
+                1.0
+              ]
+            },
+            "using": "sparse",
+            "limit": 3
+          },
+          "ok": true,
+          "result": {
+            "hits": [
+              {
+                "id": 1,
+                "title": "Reset your password",
+                "score": 2.0
+              },
+              {
+                "id": 2,
+                "title": "Rotate API keys",
+                "score": 0.4
+              },
+              {
+                "id": 4,
+                "title": "Set up single sign-on",
+                "score": 0.3
+              }
+            ]
+          }
+        },
+        {
+          "tool": "qdrant_query",
+          "arguments": {
+            "collection_name": "demo_articles",
+            "fusion": "rrf",
+            "prefetch": [
+              {
+                "query_vector": [
+                  0.85,
+                  0.2,
+                  0.0,
+                  0.2
+                ],
+                "using": "dense",
+                "limit": 6
+              },
+              {
+                "query_vector": {
+                  "indices": [
+                    1,
+                    8
+                  ],
+                  "values": [
+                    1.0,
+                    1.0
+                  ]
+                },
+                "using": "sparse",
+                "limit": 6
+              }
+            ],
+            "limit": 3
+          },
+          "ok": true,
+          "result": {
+            "hits": [
+              {
+                "id": 1,
+                "title": "Reset your password",
+                "score": 0.8333
+              },
+              {
+                "id": 4,
+                "title": "Set up single sign-on",
+                "score": 0.75
+              },
+              {
+                "id": 2,
+                "title": "Rotate API keys",
+                "score": 0.5
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "zero-downtime-reindex",
+      "steps": [
+        {
+          "tool": "qdrant_collection_create",
+          "arguments": {
+            "collection_name": "demo_docs_v1",
+            "vector_size": 2,
+            "distance": "Cosine"
+          },
+          "ok": true,
+          "result": {
+            "status": "green",
+            "points_count": 0,
+            "vectors": {
+              "size": 2,
+              "distance": "Cosine"
+            },
+            "hnsw_m": 16
+          }
+        },
+        {
+          "tool": "qdrant_points_upsert",
+          "arguments": {
+            "collection_name": "demo_docs_v1",
+            "points": [
+              {
+                "id": 1,
+                "vector": [
+                  1.0,
+                  0.2
+                ],
+                "payload": {
+                  "title": "Article 1"
+                }
+              },
+              {
+                "id": 2,
+                "vector": [
+                  1.0,
+                  0.4
+                ],
+                "payload": {
+                  "title": "Article 2"
+                }
+              },
+              {
+                "id": 3,
+                "vector": [
+                  1.0,
+                  0.6000000000000001
+                ],
+                "payload": {
+                  "title": "Article 3"
+                }
+              },
+              {
+                "id": 4,
+                "vector": [
+                  1.0,
+                  0.8
+                ],
+                "payload": {
+                  "title": "Article 4"
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "result": {
+            "status": "completed"
+          }
+        },
+        {
+          "tool": "qdrant_alias_update",
+          "arguments": {
+            "operations": [
+              {
+                "create_alias": {
+                  "collection_name": "demo_docs_v1",
+                  "alias_name": "demo_docs"
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "result": {
+            "applied": true
+          }
+        },
+        {
+          "tool": "qdrant_collection_create",
+          "arguments": {
+            "collection_name": "demo_docs_v2",
+            "vector_size": 2,
+            "distance": "Euclid",
+            "hnsw_config": {
+              "m": 24
+            }
+          },
+          "ok": true,
+          "result": {
+            "status": "green",
+            "points_count": 0,
+            "vectors": {
+              "size": 2,
+              "distance": "Euclid"
+            },
+            "hnsw_m": 24
+          }
+        },
+        {
+          "tool": "qdrant_collection_copy",
+          "arguments": {
+            "source_collection": "demo_docs",
+            "target_collection": "demo_docs_v2"
+          },
+          "ok": true,
+          "result": {
+            "copied": 4,
+            "next_offset": null,
+            "done": true
+          }
+        },
+        {
+          "tool": "qdrant_alias_update",
+          "arguments": {
+            "operations": [
+              {
+                "create_alias": {
+                  "collection_name": "demo_docs_v2",
+                  "alias_name": "demo_docs"
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "result": {
+            "applied": true
+          }
+        },
+        {
+          "tool": "qdrant_collection_info",
+          "arguments": {
+            "collection_name": "demo_docs"
+          },
+          "ok": true,
+          "result": {
+            "status": "green",
+            "points_count": 4,
+            "vectors": {
+              "size": 2,
+              "distance": "Euclid"
+            },
+            "hnsw_m": 24
+          }
+        }
+      ]
+    },
+    {
+      "id": "know-the-payload",
+      "steps": [
+        {
+          "tool": "qdrant_collection_create",
+          "arguments": {
+            "collection_name": "demo_events",
+            "vector_size": 2,
+            "distance": "Cosine"
+          },
+          "ok": true,
+          "result": {
+            "status": "green",
+            "points_count": 0,
+            "vectors": {
+              "size": 2,
+              "distance": "Cosine"
+            },
+            "hnsw_m": 16
+          }
+        },
+        {
+          "tool": "qdrant_points_upsert",
+          "arguments": {
+            "collection_name": "demo_events",
+            "points": [
+              {
+                "id": 1,
+                "vector": [
+                  1.0,
+                  0.0
+                ],
+                "payload": {
+                  "city": "ny",
+                  "price": 10.0,
+                  "tags": [
+                    "a",
+                    "b"
+                  ],
+                  "user id": "u1",
+                  "meta": {
+                    "owner": "ops"
+                  }
+                }
+              },
+              {
+                "id": 2,
+                "vector": [
+                  1.0,
+                  0.0
+                ],
+                "payload": {
+                  "city": "sf",
+                  "price": 20.0,
+                  "tags": [
+                    "a",
+                    "b"
+                  ],
+                  "user id": "u2",
+                  "meta": {
+                    "owner": "ops"
+                  }
+                }
+              },
+              {
+                "id": 3,
+                "vector": [
+                  1.0,
+                  0.0
+                ],
+                "payload": {
+                  "city": "ny",
+                  "price": 30.0,
+                  "tags": [
+                    "a",
+                    "b"
+                  ],
+                  "user id": "u3",
+                  "meta": {
+                    "owner": "ops"
+                  }
+                }
+              },
+              {
+                "id": 4,
+                "vector": [
+                  1.0,
+                  0.0
+                ],
+                "payload": {
+                  "city": "sf",
+                  "price": 40.0,
+                  "tags": [
+                    "a",
+                    "b"
+                  ],
+                  "user id": "u4",
+                  "meta": {
+                    "owner": "ops"
+                  }
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "result": {
+            "status": "completed"
+          }
+        },
+        {
+          "tool": "qdrant_payload_index_create",
+          "arguments": {
+            "collection_name": "demo_events",
+            "field_name": "city",
+            "field_schema": "keyword"
+          },
+          "ok": true,
+          "result": {
+            "status": "completed"
+          }
+        },
+        {
+          "tool": "qdrant_payload_schema_infer",
+          "arguments": {
+            "collection_name": "demo_events"
+          },
+          "ok": true,
+          "result": {
+            "sampled": 4,
+            "collection_points": 4,
+            "fields": [
+              {
+                "key": "\"user id\"",
+                "types": [
+                  "string"
+                ],
+                "is_array": false,
+                "present_in": 4,
+                "indexed": false,
+                "index_type": null
+              },
+              {
+                "key": "city",
+                "types": [
+                  "string"
+                ],
+                "is_array": false,
+                "present_in": 4,
+                "indexed": true,
+                "index_type": "keyword",
+                "top_values": [
+                  {
+                    "value": "ny",
+                    "count": 2
+                  },
+                  {
+                    "value": "sf",
+                    "count": 2
+                  }
+                ]
+              },
+              {
+                "key": "meta.owner",
+                "types": [
+                  "string"
+                ],
+                "is_array": false,
+                "present_in": 4,
+                "indexed": false,
+                "index_type": null
+              },
+              {
+                "key": "price",
+                "types": [
+                  "float"
+                ],
+                "is_array": false,
+                "present_in": 4,
+                "indexed": false,
+                "index_type": null
+              },
+              {
+                "key": "tags",
+                "types": [
+                  "string"
+                ],
+                "is_array": true,
+                "present_in": 4,
+                "indexed": false,
+                "index_type": null
+              }
+            ],
+            "indexed_but_unseen": []
+          }
+        },
+        {
+          "tool": "qdrant_points_count",
+          "arguments": {
+            "collection_name": "demo_events",
+            "count_filter": {
+              "must": [
+                {
+                  "key": "\"user id\"",
+                  "match": {
+                    "value": "u3"
+                  }
+                }
+              ]
+            }
+          },
+          "ok": true,
+          "result": {
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "safety-rails",
+      "steps": [
+        {
+          "tool": "qdrant_points_count",
+          "arguments": {
+            "collection_name": "demo_safe"
+          },
+          "ok": true,
+          "result": {
+            "count": 4
+          }
+        },
+        {
+          "tool": "qdrant_points_delete",
+          "arguments": {
+            "collection_name": "demo_safe",
+            "points_filter": {
+              "must": []
+            }
+          },
+          "ok": false,
+          "error": "Error executing tool qdrant_points_delete: `points_filter` has no conditions, so it would match every point in the collection. Add at least one condition, or list the ids explicitly."
+        },
+        {
+          "tool": "qdrant_points_count",
+          "arguments": {
+            "collection_name": "demo_safe"
+          },
+          "ok": true,
+          "result": {
+            "count": 4
+          }
+        },
+        {
+          "method": "tools/list",
+          "environment": {
+            "QDRANT_MCP_READ_ONLY": "1"
+          },
+          "ok": true,
+          "result": {
+            "tools_visible": 31,
+            "tools_in_full_server": 56
+          }
+        }
+      ]
+    }
+  ]
+}

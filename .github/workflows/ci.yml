@@ -20,6 +20,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run python scripts/gen_tools_doc.py --check
       - run: uv run python scripts/gen_tools_json.py --check
+      - run: uv run python scripts/gen_site_stats.py --check
 
   typecheck:
     runs-on: ubuntu-latest
@@ -62,3 +63,6 @@ jobs:
           echo "Qdrant did not become ready in time" >&2
           exit 1
       - run: uv run pytest
+      # The landing page replays these transcripts: re-record them against the real
+      # Qdrant and fail if a tool's (or Qdrant's) behavior no longer matches the page.
+      - run: uv run python scripts/record_scenarios.py --check

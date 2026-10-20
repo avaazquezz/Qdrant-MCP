@@ -1,0 +1,89 @@
+{
+  "version": "2.6.0",
+  "tools": 56,
+  "toolsets": {
+    "core": 13,
+    "search": 9,
+    "payload": 12,
+    "admin": 7,
+    "snapshots": 9,
+    "observability": 6
+  },
+  "read_only_tools": 31,
+  "destructive_tools": 17,
+  "tests": 554,
+  "core_schema_kb": 46,
+  "catalog_schema_kb": 173,
+  "releases": [
+    {
+      "version": "2.6.0",
+      "date": "2026-10-20"
+    },
+    {
+      "version": "2.5.0",
+      "date": "2026-10-20"
+    },
+    {
+      "version": "2.4.0",
+      "date": "2026-10-20"
+    },
+    {
+      "version": "2.3.0",
+      "date": "2026-10-20"
+    },
+    {
+      "version": "2.2.0",
+      "date": "2026-10-20"
+    },
+    {
+      "version": "2.1.0",
+      "date": "2026-10-20"
+    },
+    {
+      "version": "2.0.0",
+      "date": "2026-10-20"
+    },
+    {
+      "version": "1.1.1",
+      "date": "2026-09-01"
+    },
+    {
+      "version": "1.1.0",
+      "date": "2026-09-01"
+    },
+    {
+      "version": "1.0.1",
+      "date": "2026-08-31"
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-08-31"
+    },
+    {
+      "version": "0.6.0",
+      "date": "2026-08-31"
+    },
+    {
+      "version": "0.4.0",
+      "date": "2026-08-31"
+    },
+    {
+      "version": "0.3.0",
+      "date": "2026-08-31"
+    },
+    {
+      "version": "0.2.0",
+      "date": "2026-08-31"
+    },
+    {
+      "version": "0.1.0",
+      "date": "2026-08-30"
+    },
+    {
+      "version": "0.0.1",
+      "date": "2026-08-30"
+    }
+  ],
+  "source_lines": 3322,
+  "test_lines": 5717
+}
