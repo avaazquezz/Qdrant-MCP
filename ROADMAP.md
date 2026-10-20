@@ -641,11 +641,12 @@ explicar cómo funciona el proyecto de forma completa, fácil, interactiva y muy
   texto. Probado a 375 px (se corrigieron un desbordamiento horizontal por columnas de rejilla
   implícitas y un solape en las tarjetas de arquitectura), con teclado (skip link, foco visible)
   y con `prefers-reduced-motion` simulado (sin pin, sin Lenis, todo el contenido visible).
-- Dominio `https://vazquezdev.pro` en `nuxt.config.ts` (`siteUrl`): de ahí salen canonical, hreflang,
+- Dominio `https://mcp-qdrant.vazquezlabs.com` (convención del propietario: `proyecto.vazquezlabs.com`) en
+  `nuxt.config.ts` (`siteUrl`): de ahí salen canonical, hreflang,
   `og:*`, `sitemap.xml` y `robots.txt` (rutas de servidor prerenderizadas), un único sitio donde vive
   el dominio; `NUXT_PUBLIC_SITE_URL` lo sobrescribe en build y vacío los omite.
-- Pendiente fuera del repo: publicar la nueva imagen del contenedor y desmontar la instancia
-  pública antigua.
+- Pendiente fuera del repo: ese host lo ocupa todavía la instancia pública antigua (Fase 10):
+  desmontarla y servir ahí la imagen nueva de la landing.
 
 ## Versionado
 
