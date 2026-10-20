@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://mcp-qdrant-web.vazquezlabs.com/sitemap.xml

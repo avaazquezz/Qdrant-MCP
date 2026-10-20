@@ -1,8 +1,13 @@
 {
   "name": "Qdrant MCP",
   "short_name": "mcp-qdrant",
-  "theme_color": "#F2EFE7",
-  "background_color": "#F2EFE7",
+  "description": "Qdrant's whole API as MCP tools. Every claim tested against a real server.",
+  "start_url": "/",
   "display": "browser",
-  "icons": []
+  "background_color": "#F2EFE7",
+  "theme_color": "#F2EFE7",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
 }

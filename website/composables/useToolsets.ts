@@ -1,50 +1,52 @@
 import { computed, reactive, ref, watch } from 'vue'
 import tools from '~/data/tools.generated.json'
-
-export type ToolsetName = 'core' | 'search' | 'payload' | 'snapshots' | 'observability'
+import type { ToolsetId } from '~/content/copy'
 
 export interface Toolset {
-  name: ToolsetName
+  name: ToolsetId
   total: number
   readOnly: number
 }
 
-// Derived once from the generated registry dump, never hand-maintained —
-// if the registry drifts, `scripts/gen_tools_json.py --check` fails CI
-// before this ever ships a wrong count.
-const TOOLSET_ORDER: ToolsetName[] = ['core', 'search', 'payload', 'snapshots', 'observability']
+// Derived once from the generated registry dump, never hand-maintained: if the registry
+// drifts, `scripts/gen_tools_json.py --check` fails CI before this ships a wrong count.
+export const TOOLSET_ORDER: ToolsetId[] = [
+  'core',
+  'search',
+  'payload',
+  'snapshots',
+  'admin',
+  'observability',
+]
 
-const TOOLSETS: Toolset[] = TOOLSET_ORDER.map((name) => {
+export const TOOLSETS: Toolset[] = TOOLSET_ORDER.map((name) => {
   const inSet = tools.filter((t) => t.toolset === name)
   return { name, total: inSet.length, readOnly: inSet.filter((t) => t.read_only).length }
 })
 
-const TOTAL_TOOLS = tools.length
+export const TOTAL_TOOLS = tools.length
 
 /**
- * Single source of truth for the §04 registry panel: which toolsets are
- * enabled, whether QDRANT_MCP_READ_ONLY is on, and every value derived from
- * that (the registered count, the per-toolset dot state, and the literal
- * .mcp.json string). Shared so the masthead/hero CTA and the panel's own
- * readout can never disagree about what "the config" currently is.
+ * Which toolsets are enabled and whether read-only mode is on, plus everything derived
+ * from that: the registered-tool count and the literal `.mcp.json` string. One source of
+ * truth so the count and the config text can never disagree.
  */
 export function useToolsets() {
-  const enabled = reactive<Record<ToolsetName, boolean>>({
+  const enabled = reactive<Record<ToolsetId, boolean>>({
     core: true,
     search: false,
     payload: false,
     snapshots: false,
+    admin: false,
     observability: false,
   })
   const readOnly = ref(false)
 
-  // Checkboxes here bind with v-model, not a bare :checked + @change — a
-  // plain :checked binding on a native checkbox is a known Vue SSR/
-  // hydration trap (the SSR-rendered `checked` attribute is correct, but
-  // the client's post-hydration `.checked` DOM property silently ends up
-  // false), which v-model's dedicated checkbox directive is hardened
-  // against. The "at least one toolset" invariant is enforced here instead
-  // of in a click handler, so it holds no matter how `enabled` changes.
+  // Checkboxes bind with v-model, not a bare :checked + @change: a plain :checked binding
+  // on a native checkbox is a known Vue SSR/hydration trap (the server-rendered attribute is
+  // right but the client's post-hydration `.checked` property ends up false). The
+  // "at least one toolset" invariant lives here, not in a click handler, so it holds
+  // however `enabled` changes.
   const forcedCoreNotice = ref(false)
   watch(
     enabled,
@@ -81,34 +83,5 @@ export function useToolsets() {
     )
   })
 
-  return {
-    TOOLSETS,
-    TOTAL_TOOLS,
-    enabled,
-    readOnly,
-    enabledNames,
-    registeredCount,
-    configJson,
-    forcedCoreNotice,
-  }
-}
-
-/** The fixed default `.mcp.json` — `core` only, no read-only flag. This is
- * "the config" the masthead and hero CTAs copy; it is deliberately not
- * wired to the §04 panel's live state, so it means the same thing no
- * matter how far a visitor has scrolled or what they have toggled. */
-export function defaultConfigJson(): string {
-  return JSON.stringify(
-    {
-      mcpServers: {
-        qdrant: {
-          command: 'uvx',
-          args: ['mcp-qdrant'],
-          env: { QDRANT_URL: 'http://localhost:6333', QDRANT_MCP_TOOLSETS: 'core' },
-        },
-      },
-    },
-    null,
-    2
-  )
+  return { enabled, readOnly, enabledNames, registeredCount, configJson, forcedCoreNotice }
 }

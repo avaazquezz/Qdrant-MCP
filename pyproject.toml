@@ -5,7 +5,7 @@ description = "MCP server that wraps the Qdrant vector database API as tools."
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
-    { name = "Adrián", email = "adrianvazvaz.2117@gmail.com" }
+    { name = "Adrián", email = "adrian@vazquezdev.pro" }
 ]
 requires-python = ">=3.12"
 classifiers = [
