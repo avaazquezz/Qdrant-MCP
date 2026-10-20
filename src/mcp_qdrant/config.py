@@ -9,9 +9,9 @@ tool calls, instead of failing obscurely on the first tool call.
 from __future__ import annotations
 
 import os
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 Transport = Literal["stdio", "streamable-http"]
 Toolset = Literal["core", "search", "payload", "snapshots", "admin", "observability"]
@@ -25,6 +25,10 @@ ALL_TOOLSETS: tuple[Toolset, ...] = (
     "observability",
 )
 DEFAULT_TOOLSETS: tuple[Toolset, ...] = ("core",)
+# Largest number of points/hits one tool call may ask for. Each result carries its
+# payload (and vectors, if requested) into the model's context, so an unbounded
+# `limit` is a way to flood it by accident.
+DEFAULT_MAX_LIMIT = 1000
 
 
 class Settings(BaseModel):
@@ -39,6 +43,7 @@ class Settings(BaseModel):
     shared_secret: str | None = None
     http_host: str = "127.0.0.1"
     http_port: int = 8000
+    max_limit: Annotated[int, Field(gt=0)] = DEFAULT_MAX_LIMIT
 
     @model_validator(mode="after")
     def _check_single_connection_target(self) -> Settings:
@@ -87,7 +92,19 @@ class Settings(BaseModel):
             shared_secret=e.get("QDRANT_MCP_SHARED_SECRET") or None,
             http_host=e.get("QDRANT_MCP_HTTP_HOST", "127.0.0.1"),
             http_port=int(e.get("QDRANT_MCP_HTTP_PORT", "8000")),
+            max_limit=_parse_max_limit(e.get("QDRANT_MCP_MAX_LIMIT")),
         )
+
+
+def _parse_max_limit(value: str | None) -> int:
+    if value is None or not value.strip():
+        return DEFAULT_MAX_LIMIT
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError(
+            f"QDRANT_MCP_MAX_LIMIT must be a positive integer, got {value!r}."
+        ) from None
 
 
 def _parse_bool(value: str | None) -> bool:

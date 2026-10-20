@@ -9,26 +9,25 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
-    BinaryQuantization,
     CollectionInfo,
-    CollectionParamsDiff,
     CollectionsResponse,
     Disabled,
     Distance,
-    HnswConfigDiff,
-    OptimizersConfigDiff,
-    ProductQuantization,
-    ScalarQuantization,
-    SparseVectorParams,
-    StrictModeConfig,
     VectorParams,
-    VectorParamsDiff,
 )
 
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.registry import ToolRegistry
-
-QuantizationConfigInput = ScalarQuantization | ProductQuantization | BinaryQuantization
+from mcp_qdrant.tools.schemas import (
+    CollectionParamsDiffInput,
+    HnswConfigDiffInput,
+    OptimizersConfigDiffInput,
+    QuantizationConfigInput,
+    SparseVectorParamsMapInput,
+    StrictModeConfigInput,
+    VectorParamsDiffMapInput,
+    VectorParamsMapInput,
+)
 
 _CREATE_ANNOTATIONS = ToolAnnotations(
     title="Create Qdrant collection",
@@ -91,13 +90,13 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         collection_name: str,
         vector_size: Annotated[int, Field(gt=0)] | None = None,
         distance: Literal["Cosine", "Euclid", "Dot", "Manhattan"] = "Cosine",
-        vectors: dict[str, VectorParams] | None = None,
-        sparse_vectors: dict[str, SparseVectorParams] | None = None,
+        vectors: VectorParamsMapInput | None = None,
+        sparse_vectors: SparseVectorParamsMapInput | None = None,
         quantization_config: QuantizationConfigInput | None = None,
-        strict_mode_config: StrictModeConfig | None = None,
+        strict_mode_config: StrictModeConfigInput | None = None,
         metadata: dict[str, Any] | None = None,
-        hnsw_config: HnswConfigDiff | None = None,
-        optimizers_config: OptimizersConfigDiff | None = None,
+        hnsw_config: HnswConfigDiffInput | None = None,
+        optimizers_config: OptimizersConfigDiffInput | None = None,
         on_disk_payload: bool | None = None,
     ) -> CollectionInfo:
         """Create a collection: either a single unnamed vector (`vector_size`
@@ -165,13 +164,13 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
     async def qdrant_collection_update(
         collection_name: str,
-        optimizers_config: OptimizersConfigDiff | None = None,
-        hnsw_config: HnswConfigDiff | None = None,
-        collection_params: CollectionParamsDiff | None = None,
-        vectors_config: dict[str, VectorParamsDiff] | None = None,
+        optimizers_config: OptimizersConfigDiffInput | None = None,
+        hnsw_config: HnswConfigDiffInput | None = None,
+        collection_params: CollectionParamsDiffInput | None = None,
+        vectors_config: VectorParamsDiffMapInput | None = None,
         quantization_config: QuantizationConfigInput | Literal["disabled"] | None = None,
-        sparse_vectors_config: dict[str, SparseVectorParams] | None = None,
-        strict_mode_config: StrictModeConfig | None = None,
+        sparse_vectors_config: SparseVectorParamsMapInput | None = None,
+        strict_mode_config: StrictModeConfigInput | None = None,
     ) -> CollectionInfo:
         """Update optimizer/HNSW/collection/vector params on an existing
         collection.

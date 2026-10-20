@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
     CountResult,
-    Filter,
     OrderBy,
     PointStruct,
     Record,
@@ -21,6 +20,7 @@ from qdrant_client.http.models import (
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector, page_offset
 from mcp_qdrant.tools.registry import ToolRegistry
+from mcp_qdrant.tools.schemas import FilterInput
 
 _UPSERT_ANNOTATIONS = ToolAnnotations(
     title="Upsert Qdrant points",
@@ -85,7 +85,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         points: Annotated[list[PointInput], Field(min_length=1)],
         wait: bool = True,
         update_mode: Literal["upsert", "insert_only", "update_only"] | None = None,
-        update_filter: Filter | None = None,
+        update_filter: FilterInput | None = None,
     ) -> UpdateResult:
         """Insert or replace points (id + vector + payload) in a collection.
 
@@ -141,6 +141,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
         Example: {"collection_name": "docs", "ids": [1, 2]}
         """
+        registry.check_limit(len(ids), "the number of ids")
         records = await call_qdrant(
             lambda: client.retrieve(
                 collection_name, ids=ids, with_payload=with_payload, with_vectors=with_vectors
@@ -151,7 +152,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_points_delete(
         collection_name: str,
         ids: list[int | str] | None = None,
-        points_filter: Filter | None = None,
+        points_filter: FilterInput | None = None,
     ) -> UpdateResult:
         """Delete points by id list or by payload filter — exactly one of the two.
 
@@ -169,7 +170,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
     async def qdrant_points_scroll(
         collection_name: str,
-        scroll_filter: Filter | None = None,
+        scroll_filter: FilterInput | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         offset: int | str | None = None,
         with_payload: bool = True,
@@ -179,7 +180,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         """Page through all points in a collection, optionally filtered.
 
         Pass the returned `next_page_offset` as `offset` to fetch the next
-        page; `null` means there are no more pages.
+        page; `null` means there are no more pages. `limit` is capped per call
+        by the server's QDRANT_MCP_MAX_LIMIT (1000 by default).
 
         `order_by` sorts by a payload field instead of by id: a key, or
         `{"key": ..., "direction": "asc"|"desc", "start_from": value}`; the key
@@ -193,6 +195,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Example (newest first): {"collection_name": "docs", "limit": 20,
             "order_by": {"key": "created_at", "direction": "desc"}}
         """
+        registry.check_limit(limit)
         records, next_offset = await call_qdrant(
             lambda: client.scroll(
                 collection_name,
@@ -207,7 +210,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         return PointsScrollResult(points=records, next_page_offset=page_offset(next_offset))
 
     async def qdrant_points_count(
-        collection_name: str, count_filter: Filter | None = None, exact: bool = True
+        collection_name: str, count_filter: FilterInput | None = None, exact: bool = True
     ) -> CountResult:
         """Count points in a collection, optionally matching a filter.
 

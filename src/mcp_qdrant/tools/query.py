@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 from mcp_types import ToolAnnotations
 from pydantic import Field
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.http.models import Filter, OrderBy, QueryResponse, SearchParams
+from qdrant_client.http.models import OrderBy, QueryResponse
 
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.query_shared import (
@@ -26,6 +26,7 @@ from mcp_qdrant.tools.query_shared import (
     build_query_value,
 )
 from mcp_qdrant.tools.registry import ToolRegistry
+from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput
 
 _QUERY_ANNOTATIONS = ToolAnnotations(
     title="Query Qdrant",
@@ -48,8 +49,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         sample: Literal["random"] | None = None,
         using: str | None = None,
         lookup_from: LookupFromInput | None = None,
-        query_filter: Filter | None = None,
-        search_params: SearchParams | None = None,
+        query_filter: FilterInput | None = None,
+        search_params: SearchParamsInput | None = None,
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         offset: OffsetInput | None = None,
@@ -107,7 +108,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Tuning: `search_params` (`hnsw_ef`, `exact` for brute force,
         `quantization`: `ignore`/`rescore`/`oversampling`, `indexed_only`,
         `acorn`), `score_threshold` (drop weaker hits), `limit` + `offset`
-        (paging), `timeout_seconds` (server-side), and `consistency` (a replica count, or
+        (paging; `limit` is capped per call by the server's QDRANT_MCP_MAX_LIMIT,
+        1000 by default — page with `offset` for more), `timeout_seconds`
+        (server-side), and `consistency` (a replica count, or
         `"majority"`/`"quorum"`/`"all"`; only meaningful on a replicated
         deployment). Fails with a clear error if the collection doesn't exist.
 
@@ -127,6 +130,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Example (cheapest first): {"collection_name": "docs", "order_by": {"key": "price",
             "direction": "asc"}, "limit": 5}
         """
+        registry.check_limit(limit)
         query = build_query_value(
             query_vector, fusion, mmr=mmr, formula=formula, order_by=order_by, sample=sample
         )

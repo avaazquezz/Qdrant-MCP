@@ -59,7 +59,10 @@ def build_server(settings: Settings | None = None) -> MCPServer[None]:
 
     server: MCPServer[None] = MCPServer(name=SERVER_NAME, version=__version__, lifespan=lifespan)
     registry = ToolRegistry(
-        server, enabled_toolsets=settings.toolsets, read_only=settings.read_only
+        server,
+        enabled_toolsets=settings.toolsets,
+        read_only=settings.read_only,
+        max_limit=settings.max_limit,
     )
     for module in _TOOL_MODULES:
         module.register(registry, client)

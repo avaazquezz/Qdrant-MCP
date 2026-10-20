@@ -73,6 +73,10 @@ finding that shaped a decision (in Spanish).
 - **Opt-in tool surface** — tools are grouped into toolsets you enable explicitly, so a client
   isn't handed 60+ overlapping tools by default.
 - **Read-only guard** — one flag removes every mutating tool from the registry entirely.
+- **Easy on the model's context** — the schemas the server advertises are compact (Qdrant's
+  verbose `Filter` and configuration models are summarized, validation unchanged), so the
+  default toolset costs ~44 KB of schema instead of ~150 KB, and a per-call result cap
+  (`QDRANT_MCP_MAX_LIMIT`) stops one mistaken `limit` from flooding the conversation.
 - **Resilient by default** — every Qdrant call goes through retry-with-backoff and returns
   Qdrant's own error message on failure, never a generic exception.
 
@@ -202,6 +206,7 @@ immediately instead of surfacing later as a confusing tool error.
 | `QDRANT_MCP_SHARED_SECRET` | — | Yes, for `streamable-http` | Bearer token clients must send in the `Authorization` header. |
 | `QDRANT_MCP_HTTP_HOST` | `127.0.0.1` | No | Bind host for `streamable-http`. Use `0.0.0.0` in a container. |
 | `QDRANT_MCP_HTTP_PORT` | `8000` | No | Bind port for `streamable-http`. |
+| `QDRANT_MCP_MAX_LIMIT` | `1000` | No | Largest number of points one tool call may ask for (`limit`, groups' `limit × group_size`, a batch's total, the number of ids, ...). A bigger request is refused with a message saying to page, not silently cut. |
 
 ¹ `QDRANT_URL` and `QDRANT_LOCAL_PATH` are mutually exclusive; if neither is set, the client
 falls back to the `qdrant-client` SDK's own default of `localhost:6333`.

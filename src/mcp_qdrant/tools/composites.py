@@ -24,7 +24,6 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
-    Filter,
     PointStruct,
     Sample,
     SampleQuery,
@@ -34,6 +33,7 @@ from qdrant_client.http.models import (
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.points_shared import page_offset
 from mcp_qdrant.tools.registry import ToolRegistry
+from mcp_qdrant.tools.schemas import FilterInput
 
 # Index types Qdrant can facet on (verified hands-on against v1.19.0: keyword,
 # integer, uuid and bool work; float, datetime, text and geo answer 400 "No
@@ -145,7 +145,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def copy_batch(
         source: str,
         target: str,
-        copy_filter: Filter | None,
+        copy_filter: FilterInput | None,
         *,
         start: int | str | None,
         limit: int,
@@ -182,7 +182,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_collection_copy(
         source_collection: str,
         target_collection: str,
-        copy_filter: Filter | None = None,
+        copy_filter: FilterInput | None = None,
         batch_size: Annotated[int, Field(gt=0, le=1000)] = 100,
         max_points: Annotated[int, Field(gt=0, le=100_000)] = 1000,
         offset: int | str | None = None,
@@ -255,7 +255,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_payload_schema_infer(
         collection_name: str,
         sample_size: Annotated[int, Field(gt=0, le=1000)] = 100,
-        sample_filter: Filter | None = None,
+        sample_filter: FilterInput | None = None,
         top_values: Annotated[int, Field(ge=0, le=50)] = 5,
         max_fields: Annotated[int, Field(gt=0, le=1000)] = 200,
     ) -> PayloadSchemaProfile:

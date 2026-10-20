@@ -13,9 +13,10 @@ from collections.abc import Callable
 from typing import Any
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 
-from mcp_qdrant.config import Toolset
+from mcp_qdrant.config import DEFAULT_MAX_LIMIT, Toolset
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +25,30 @@ class ToolRegistry:
     """Wraps one MCPServer instance with toolset filtering and the read-only guard."""
 
     def __init__(
-        self, server: MCPServer[Any], *, enabled_toolsets: tuple[Toolset, ...], read_only: bool
+        self,
+        server: MCPServer[Any],
+        *,
+        enabled_toolsets: tuple[Toolset, ...],
+        read_only: bool,
+        max_limit: int = DEFAULT_MAX_LIMIT,
     ) -> None:
         self._server = server
         self._enabled_toolsets = frozenset(enabled_toolsets)
         self._read_only = read_only
+        self._max_limit = max_limit
+
+    def check_limit(self, requested: int, what: str = "limit") -> None:
+        """Refuse a request for more results than QDRANT_MCP_MAX_LIMIT allows.
+
+        Fails instead of silently clamping: a clamped call would hand the model
+        fewer results than it asked for with nothing to say so.
+        """
+        if requested > self._max_limit:
+            raise ToolError(
+                f"{what} is {requested}, above this server's cap of {self._max_limit} results "
+                f"per call (QDRANT_MCP_MAX_LIMIT). Ask for at most {self._max_limit} and "
+                "page through the rest."
+            )
 
     def register(
         self,

@@ -20,7 +20,6 @@ from qdrant_client.http.models import (
     ContextPair,
     DiscoverInput,
     DiscoverQuery,
-    Filter,
     GroupsResult,
     OrderBy,
     QueryRequest,
@@ -30,7 +29,6 @@ from qdrant_client.http.models import (
     RecommendStrategy,
     SearchMatrixOffsetsResponse,
     SearchMatrixPairsResponse,
-    SearchParams,
     VectorInput,
 )
 
@@ -51,6 +49,7 @@ from mcp_qdrant.tools.query_shared import (
     build_query_value,
 )
 from mcp_qdrant.tools.registry import ToolRegistry
+from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput
 
 RecommendStrategyName = Literal["average_vector", "best_score", "sum_scores"]
 
@@ -139,8 +138,8 @@ class QuerySpec(BaseModel):
     sample: Literal["random"] | None = None
     using: str | None = None
     lookup_from: LookupFromInput | None = None
-    query_filter: Filter | None = None
-    search_params: SearchParams | None = None
+    query_filter: FilterInput | None = None
+    search_params: SearchParamsInput | None = None
     score_threshold: float | None = None
     limit: Annotated[int, Field(gt=0)] = 10
     offset: OffsetInput | None = None
@@ -185,8 +184,8 @@ class RecommendSpec(BaseModel):
     using: str | None = None
     lookup_from: LookupFromInput | None = None
     prefetch: list[PrefetchInput] | None = None
-    query_filter: Filter | None = None
-    search_params: SearchParams | None = None
+    query_filter: FilterInput | None = None
+    search_params: SearchParamsInput | None = None
     score_threshold: float | None = None
     limit: Annotated[int, Field(gt=0)] = 10
     offset: OffsetInput | None = None
@@ -218,8 +217,8 @@ class DiscoverSpec(BaseModel):
     using: str | None = None
     lookup_from: LookupFromInput | None = None
     prefetch: list[PrefetchInput] | None = None
-    query_filter: Filter | None = None
-    search_params: SearchParams | None = None
+    query_filter: FilterInput | None = None
+    search_params: SearchParamsInput | None = None
     score_threshold: float | None = None
     limit: Annotated[int, Field(gt=0)] = 10
     offset: OffsetInput | None = None
@@ -284,6 +283,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             {"query_vector": [0.5, 0.5, 0.5, 0.5], "limit": 5}
         ]}
         """
+        registry.check_limit(sum(q.limit for q in queries), "the total limit of all queries")
         requests = [q.to_request() for q in queries]
         return await call_qdrant(
             lambda: client.query_batch_points(
@@ -306,8 +306,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         sample: Literal["random"] | None = None,
         using: str | None = None,
         lookup_from: LookupFromInput | None = None,
-        query_filter: Filter | None = None,
-        search_params: SearchParams | None = None,
+        query_filter: FilterInput | None = None,
+        search_params: SearchParamsInput | None = None,
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         group_size: Annotated[int, Field(gt=0)] = 3,
@@ -325,6 +325,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Example: {"collection_name": "docs", "group_by": "document_id",
             "query_vector": [0.1, 0.2, 0.3, 0.4], "group_size": 2}
         """
+        registry.check_limit(limit * group_size, "limit × group_size")
         query = build_query_value(
             query_vector, fusion, mmr=mmr, formula=formula, order_by=order_by, sample=sample
         )
@@ -357,8 +358,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         using: str | None = None,
         lookup_from: LookupFromInput | None = None,
         prefetch: list[PrefetchInput] | None = None,
-        query_filter: Filter | None = None,
-        search_params: SearchParams | None = None,
+        query_filter: FilterInput | None = None,
+        search_params: SearchParamsInput | None = None,
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         offset: OffsetInput | None = None,
@@ -378,6 +379,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
         Example: {"collection_name": "docs", "positive": [1, 2], "negative": [7]}
         """
+        registry.check_limit(limit)
         return await call_qdrant(
             lambda: client.query_points(
                 collection_name,
@@ -413,6 +415,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             {"positive": [2, 3]}
         ]}
         """
+        registry.check_limit(sum(r.limit for r in requests), "the total limit of all requests")
         built = [r.to_request() for r in requests]
         return await call_qdrant(
             lambda: client.query_batch_points(
@@ -432,8 +435,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         using: str | None = None,
         lookup_from: LookupFromInput | None = None,
         prefetch: list[PrefetchInput] | None = None,
-        query_filter: Filter | None = None,
-        search_params: SearchParams | None = None,
+        query_filter: FilterInput | None = None,
+        search_params: SearchParamsInput | None = None,
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         group_size: Annotated[int, Field(gt=0)] = 3,
@@ -450,6 +453,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Example: {"collection_name": "docs", "group_by": "document_id",
             "positive": [1, 2], "group_size": 2}
         """
+        registry.check_limit(limit * group_size, "limit × group_size")
         return await call_qdrant(
             lambda: client.query_points_groups(
                 collection_name,
@@ -478,8 +482,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         using: str | None = None,
         lookup_from: LookupFromInput | None = None,
         prefetch: list[PrefetchInput] | None = None,
-        query_filter: Filter | None = None,
-        search_params: SearchParams | None = None,
+        query_filter: FilterInput | None = None,
+        search_params: SearchParamsInput | None = None,
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         offset: OffsetInput | None = None,
@@ -500,6 +504,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             {"positive": 2, "negative": 7}
         ]}
         """
+        registry.check_limit(limit)
         return await call_qdrant(
             lambda: client.query_points(
                 collection_name,
@@ -534,6 +539,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             {"target": 1, "context": [{"positive": 2, "negative": 7}]}
         ]}
         """
+        registry.check_limit(sum(r.limit for r in requests), "the total limit of all requests")
         built = [r.to_request() for r in requests]
         return await call_qdrant(
             lambda: client.query_batch_points(
@@ -546,7 +552,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
     async def qdrant_distance_matrix_pairs(
         collection_name: str,
-        query_filter: Filter | None = None,
+        query_filter: FilterInput | None = None,
         limit: Annotated[int, Field(gt=0)] = 3,
         sample: Annotated[int, Field(gt=0)] = 10,
         using: str | None = None,
@@ -557,6 +563,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
         Example: {"collection_name": "docs", "sample": 20, "limit": 5}
         """
+        registry.check_limit(sample * limit, "sample × limit")
         return await call_qdrant(
             lambda: client.search_matrix_pairs(
                 collection_name, query_filter=query_filter, limit=limit, sample=sample, using=using
@@ -565,7 +572,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
     async def qdrant_distance_matrix_offsets(
         collection_name: str,
-        query_filter: Filter | None = None,
+        query_filter: FilterInput | None = None,
         limit: Annotated[int, Field(gt=0)] = 3,
         sample: Annotated[int, Field(gt=0)] = 10,
         using: str | None = None,
@@ -576,6 +583,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
         Example: {"collection_name": "docs", "sample": 20, "limit": 5}
         """
+        registry.check_limit(sample * limit, "sample × limit")
         return await call_qdrant(
             lambda: client.search_matrix_offsets(
                 collection_name, query_filter=query_filter, limit=limit, sample=sample, using=using
