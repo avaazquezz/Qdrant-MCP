@@ -60,6 +60,8 @@ finding that shaped a decision (in Spanish).
 - **Payload & vector editing** — set/overwrite/delete/clear payload, payload indexes, facet
   counting, named (dense/sparse) vector management, atomic batch operations.
 - **Snapshots** — per-collection and full-storage backup/restore.
+- **Aliases & introspection** — switch the collection a name points to without downtime, check
+  shard layout and whether the optimizer has finished indexing.
 - **Observability** — telemetry, Prometheus metrics endpoint, resource quotas, self-diagnosed
   issues.
 - **Opt-in tool surface** — tools are grouped into toolsets you enable explicitly, so a client
@@ -212,10 +214,10 @@ tool at once:
   operations.
 - **`snapshots`** — collection and full-storage backup/restore.
 - **`observability`** — telemetry, metrics, quotas, and self-diagnosed issues.
-- **`admin`** is a reserved toolset name with no registered tools — cluster/shard
-  administration was scoped out (see [ROADMAP.md](ROADMAP.md), Fase 5): its most useful
-  capability, real resharding, only exists on Qdrant Cloud, and the rest only matters for a
-  distributed deployment. Setting `QDRANT_MCP_TOOLSETS=admin` is valid but registers nothing.
+- **`admin`** — collection aliases (the basis of a zero-downtime reindex) and per-collection
+  shard layout and optimizer progress. Everything here works on a single node; distributed-cluster
+  administration (shard keys, resharding) is out of scope — see [ROADMAP.md](ROADMAP.md), Fase 5
+  and Fase 12.
 
 The table below is generated directly from the live tool registry — run
 `uv run python scripts/gen_tools_doc.py` after adding or changing a tool to keep it in sync
@@ -258,6 +260,11 @@ The table below is generated directly from the live tool registry — run
 | `qdrant_points_batch_update` | `payload` | ❌ | ✅ | ❌ | Run multiple point operations (upsert, delete, set/overwrite/delete/clear payload, update/delete vectors) atomically against one collection, in the order given. |
 | `qdrant_vectors_update` | `payload` | ❌ | ✅ | ✅ | Replace the vector(s) of existing points by id — leaves their payload untouched. |
 | `qdrant_vectors_delete` | `payload` | ❌ | ✅ | ✅ | Remove specific named vectors from selected points, keeping their payload and other vectors — exactly one of `ids`/`points_filter`. |
+| `qdrant_alias_list` | `admin` | ✅ | ❌ | ✅ | List every alias on the server with the collection it points to. |
+| `qdrant_collection_aliases` | `admin` | ✅ | ❌ | ✅ | List the aliases that point to one collection (an empty list if it has none). |
+| `qdrant_alias_update` | `admin` | ❌ | ✅ | ❌ | Create, rename, re-point or delete aliases — the basis of a zero-downtime reindex: build the new collection, then switch the alias that clients use. |
+| `qdrant_collection_cluster_info` | `admin` | ✅ | ❌ | ✅ | Shard layout of a collection: how many shards it has and, for each local shard, its point count and replica state. |
+| `qdrant_collection_optimizations` | `admin` | ✅ | ❌ | ✅ | Progress of the background optimizer for a collection — answers "has it finished indexing?" and "why isn't the collection green?". |
 | `qdrant_snapshot_create` | `snapshots` | ❌ | ❌ | ❌ | Create a snapshot of one collection's current state. |
 | `qdrant_snapshot_list` | `snapshots` | ✅ | ❌ | ✅ | List the snapshots stored for one collection. |
 | `qdrant_snapshot_delete` | `snapshots` | ❌ | ✅ | ✅ | Delete a collection snapshot, freeing its disk space on the server — does not touch the live collection. |

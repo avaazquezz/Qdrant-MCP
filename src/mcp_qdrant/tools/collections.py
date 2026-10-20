@@ -96,6 +96,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         quantization_config: QuantizationConfigInput | None = None,
         strict_mode_config: StrictModeConfig | None = None,
         metadata: dict[str, Any] | None = None,
+        hnsw_config: HnswConfigDiff | None = None,
+        optimizers_config: OptimizersConfigDiff | None = None,
+        on_disk_payload: bool | None = None,
     ) -> CollectionInfo:
         """Create a collection: either a single unnamed vector (`vector_size`
         + `distance`), or one or more named vectors (`vectors`, each a full
@@ -106,12 +109,20 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         `quantization_config` (scalar/product/binary) and
         `strict_mode_config` apply to the whole collection.
 
+        `hnsw_config` and `optimizers_config` set the index and optimizer
+        parameters from the start (they can also be changed later with
+        `qdrant_collection_update`); `on_disk_payload=true` keeps payloads
+        on disk instead of in RAM, which can only be chosen here.
+
         Fails with a clear error if a collection with this name already exists.
 
         Example (simple): {"collection_name": "docs", "vector_size": 4, "distance": "Cosine"}
         Example (hybrid): {"collection_name": "docs", "vectors": {
             "dense": {"size": 4, "distance": "Cosine"}
         }, "sparse_vectors": {"sparse": {}}}
+        Example (multitenant index, payload on disk): {"collection_name": "docs",
+            "vector_size": 4, "hnsw_config": {"m": 0, "payload_m": 16},
+            "on_disk_payload": true}
         """
         if (vector_size is None) == (vectors is None):
             raise ToolError("Provide exactly one of `vector_size` or `vectors`, not both/neither.")
@@ -129,6 +140,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 quantization_config=quantization_config,
                 strict_mode_config=strict_mode_config,
                 metadata=metadata,
+                hnsw_config=hnsw_config,
+                optimizers_config=optimizers_config,
+                on_disk_payload=on_disk_payload,
             )
         )
         return await call_qdrant(lambda: client.get_collection(collection_name))

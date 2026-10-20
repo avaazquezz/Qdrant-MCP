@@ -358,7 +358,7 @@ Contenido:
 Huecos a decidir cuando se aborde la fase (no ahora): dominio a usar, y si el copy
 final incluye alguna métrica de adopción (stars, downloads) o se lanza sin ella.
 
-### Fase 10 — `refactor/pure-mcp` → v2.0.0 ✅ Mergeada en `main` (PR #31); tag y acciones externas pendientes
+### Fase 10 — `refactor/pure-mcp` → v2.0.0 ✅ Cerrada (PR #31, tag `v2.0.0` publicado en PyPI/GHCR/`.mcpb`); acciones externas pendientes
 Servidor MCP puro (principio nº4). Se revierte la Fase 8 entera; **breaking** por semver,
 porque `QDRANT_MCP_BYO` salió publicado en v1.1.0.
 
@@ -378,7 +378,7 @@ porque `QDRANT_MCP_BYO` salió publicado en v1.1.0.
       (`mcp-publisher publish`) para que deje de describir el modo BYO.
 - [ ] La landing desplegada sigue anunciando la instancia BYO hasta la Fase 16.
 
-### Fase 11 — `fix/sparse-multivector-io` → v2.1.0 🚧 Implementada en la rama, pendiente de PR/merge/tag
+### Fase 11 — `fix/sparse-multivector-io` → v2.1.0 ✅ Cerrada (PR #32, tag `v2.1.0`)
 Arregla dos huecos que dejan inservible el hybrid search de la Fase 2. **Hallazgos
 verificados en vivo** (2026-10-20, Qdrant `v1.19.0`, no asumidos):
 
@@ -414,7 +414,7 @@ Trabajo:
   vacío y llegaba a Qdrant (antes lo cortaba el `min_length` del vector denso). Lo detectó un
   test unitario; `VectorOrId` acota ahora ambas formas de lista y `[[]]`.
 
-### Fase 12 — `feat/aliases-and-introspection` → v2.2.0 (toolset `admin`)
+### Fase 12 — `feat/aliases-and-introspection` → v2.2.0 (toolset `admin`) 🚧 Implementada en la rama, pendiente de PR/merge/tag
 **Corrige una decisión de la Fase 5.** Allí los aliases se descartaron junto al cluster por
 "solo tener sentido en modo distribuido"; verificado en vivo (2026-10-20, single-node
 `v1.19.0`) que **no es cierto para aliases**: crear y listar un alias funciona. También
@@ -423,14 +423,28 @@ funcionan `collection_cluster_info` (shards locales, puntos, estado) y `get_opti
 (`PUT /collections/{c}/shards` → 405; `GET /cluster` → `disabled` fuera de modo cluster).
 
 - `qdrant_alias_list`, `qdrant_collection_aliases`, `qdrant_alias_update` (lista de
-  operaciones create/delete/rename aplicadas **atómicamente** — base del reindex sin
-  downtime).
+  operaciones create/rename/delete — base del reindex sin downtime).
 - `qdrant_collection_cluster_info`, `qdrant_collection_optimizations` ("¿ha terminado de
   indexar?", "¿por qué está en amarillo?").
 - `qdrant_collection_create` gana `hnsw_config`, `optimizers_config`, `on_disk_payload`
   (hoy solo ajustables después con `_update`, y `on_disk_payload` no se puede fijar).
-- El toolset `admin` deja de ser un nombre reservado vacío: README y `config.py` se
-  actualizan.
+- El toolset `admin` deja de ser un nombre reservado vacío: README, `manifest.json` y el
+  cableado de `server.py` se actualizan.
+
+**Hallazgos verificados durante la Fase 12** (en vivo, single-node `v1.19.0`):
+- **Un lote de operaciones de alias NO es atómico ante fallos.** El roadmap original (y mi
+  primer borrador del docstring) asumían lo contrario; una petición con un `create_alias`
+  válido seguido de otro sobre una colección inexistente falla, pero deja el primero
+  aplicado. Se documenta en la tool y un test de integración lo fija (si Qdrant lo cambia,
+  el test avisa). Consecuencia de diseño: cambiar un alias a otra colección se hace con un
+  único `create_alias`, que es todo-o-nada por ser una sola operación.
+- `create_alias` sobre un alias que ya existe lo **re-apunta** (devuelve `true`): no hace
+  falta borrar y crear. Borrar un alias inexistente es un no-op; un alias no puede llamarse
+  como una colección existente (409); borrar una colección borra sus aliases.
+- Un alias vale como `collection_name` en cualquier operación (verificado con `retrieve`).
+- `AsyncQdrantClient.get_optimizations` descarta el selector `with`, así que solo devuelve
+  resumen y optimizaciones en curso; `queued`/`completed`/`idle_segments` solo salen por la
+  capa REST (`client.http.collections_api`), que es la que usa la tool.
 
 ### Fase 13 — `feat/server-side-composites` → v2.3.0 (toolset `admin`; depende de la Fase 11)
 Operaciones compuestas donde **los vectores no pasan por el contexto del LLM**. Código

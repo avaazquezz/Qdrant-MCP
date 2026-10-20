@@ -10,7 +10,7 @@
   {
     "name": "qdrant_collection_create",
     "toolset": "core",
-    "description": "Create a collection: either a single unnamed vector (`vector_size` + `distance`), or one or more named vectors (`vectors`, each a full `VectorParams` — size, distance, and optionally its own `multivector_config` for ColBERT-style multi-vectors or `quantization_config`) — exactly one of the two. `sparse_vectors` defines sparse (keyword-style) vectors at creation time. `quantization_config` (scalar/product/binary) and `strict_mode_config` apply to the whole collection.\n\nFails with a clear error if a collection with this name already exists.\n\nExample (simple): {\"collection_name\": \"docs\", \"vector_size\": 4, \"distance\": \"Cosine\"} Example (hybrid): {\"collection_name\": \"docs\", \"vectors\": { \"dense\": {\"size\": 4, \"distance\": \"Cosine\"} }, \"sparse_vectors\": {\"sparse\": {}}}",
+    "description": "Create a collection: either a single unnamed vector (`vector_size` + `distance`), or one or more named vectors (`vectors`, each a full `VectorParams` — size, distance, and optionally its own `multivector_config` for ColBERT-style multi-vectors or `quantization_config`) — exactly one of the two. `sparse_vectors` defines sparse (keyword-style) vectors at creation time. `quantization_config` (scalar/product/binary) and `strict_mode_config` apply to the whole collection.\n\n`hnsw_config` and `optimizers_config` set the index and optimizer parameters from the start (they can also be changed later with `qdrant_collection_update`); `on_disk_payload=true` keeps payloads on disk instead of in RAM, which can only be chosen here.\n\nFails with a clear error if a collection with this name already exists.\n\nExample (simple): {\"collection_name\": \"docs\", \"vector_size\": 4, \"distance\": \"Cosine\"} Example (hybrid): {\"collection_name\": \"docs\", \"vectors\": { \"dense\": {\"size\": 4, \"distance\": \"Cosine\"} }, \"sparse_vectors\": {\"sparse\": {}}} Example (multitenant index, payload on disk): {\"collection_name\": \"docs\", \"vector_size\": 4, \"hnsw_config\": {\"m\": 0, \"payload_m\": 16}, \"on_disk_payload\": true}",
     "read_only": false,
     "destructive": false,
     "idempotent": false
@@ -269,6 +269,46 @@
     "description": "Remove specific named vectors from selected points, keeping their payload and other vectors — exactly one of `ids`/`points_filter`.\n\nExample: {\"collection_name\": \"docs\", \"vector_names\": [\"sparse\"], \"ids\": [1]}",
     "read_only": false,
     "destructive": true,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_alias_list",
+    "toolset": "admin",
+    "description": "List every alias on the server with the collection it points to.\n\nAn alias is an alternative name for a collection, accepted by Qdrant anywhere a `collection_name` is — see `qdrant_alias_update`. Aliases are not returned by `qdrant_collection_list`.\n\nExample: {}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_collection_aliases",
+    "toolset": "admin",
+    "description": "List the aliases that point to one collection (an empty list if it has none). Fails with a clear error if the collection doesn't exist.\n\nExample: {\"collection_name\": \"docs_v2\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_alias_update",
+    "toolset": "admin",
+    "description": "Create, rename, re-point or delete aliases — the basis of a zero-downtime reindex: build the new collection, then switch the alias that clients use.\n\nEach operation is exactly one of `create_alias` (`collection_name`, `alias_name`), `rename_alias` (`old_alias_name`, `new_alias_name`) or `delete_alias` (`alias_name`). Operations run in order in one request but are NOT rolled back as a group: if a later one fails, the earlier ones stay applied (verified) — check `qdrant_alias_list` after an error. To switch an alias to another collection, send a single `create_alias`: on an alias name that already exists it re-points it, and a single operation is all-or-nothing.\n\nOther verified behavior: deleting an alias that doesn't exist is a no-op, not an error; an alias can't take the name of an existing collection (409); creating one for a missing collection fails. Deleting a collection also removes the aliases that pointed to it. No collection data is ever modified.\n\nExample (zero-downtime switch): {\"operations\": [ {\"create_alias\": {\"collection_name\": \"docs_v2\", \"alias_name\": \"docs\"}} ]} Example (rename then delete): {\"operations\": [ {\"rename_alias\": {\"old_alias_name\": \"docs\", \"new_alias_name\": \"docs_old\"}}, {\"delete_alias\": {\"alias_name\": \"docs_old\"}} ]}",
+    "read_only": false,
+    "destructive": true,
+    "idempotent": false
+  },
+  {
+    "name": "qdrant_collection_cluster_info",
+    "toolset": "admin",
+    "description": "Shard layout of a collection: how many shards it has and, for each local shard, its point count and replica state. Works on a single-node deployment too (one peer, `remote_shards` empty); shard transfers and resharding only ever appear on a distributed deployment. Fails with a clear error if the collection doesn't exist.\n\nExample: {\"collection_name\": \"docs\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_collection_optimizations",
+    "toolset": "admin",
+    "description": "Progress of the background optimizer for a collection — answers \"has it finished indexing?\" and \"why isn't the collection green?\".\n\nAlways returns a summary (queued optimizations/segments/points and idle segments) and the optimizations running right now. `include` adds detail lists: `queued` (waiting optimizations), `completed` (finished ones; bound them with `completed_limit`) and `idle_segments` (segments with nothing to optimize). Fails with a clear error if the collection doesn't exist.\n\nExample: {\"collection_name\": \"docs\"} Example (full detail): {\"collection_name\": \"docs\", \"include\": [\"queued\", \"completed\", \"idle_segments\"], \"completed_limit\": 5}",
+    "read_only": true,
+    "destructive": false,
     "idempotent": true
   },
   {
