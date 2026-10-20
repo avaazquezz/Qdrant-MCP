@@ -18,7 +18,7 @@ from qdrant_client.http.models import (
 )
 
 from mcp_qdrant.tools.errors import call_qdrant
-from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector
+from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector, page_offset
 from mcp_qdrant.tools.registry import ToolRegistry
 
 _UPSERT_ANNOTATIONS = ToolAnnotations(
@@ -191,15 +191,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 with_vectors=with_vectors,
             )
         )
-        # The REST client only ever returns int/str/UUID/None here (never the
-        # gRPC-only PointId protobuf variant, since this server never opts
-        # into prefer_grpc) — stringify defensively rather than assume.
-        next_offset_value: int | str | None
-        if next_offset is None or isinstance(next_offset, int | str):
-            next_offset_value = next_offset
-        else:
-            next_offset_value = str(next_offset)
-        return PointsScrollResult(points=records, next_page_offset=next_offset_value)
+        return PointsScrollResult(points=records, next_page_offset=page_offset(next_offset))
 
     async def qdrant_points_count(
         collection_name: str, count_filter: Filter | None = None, exact: bool = True

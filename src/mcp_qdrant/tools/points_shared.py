@@ -2,8 +2,10 @@
 tool that targets points by id list or payload filter (`points.py`'s
 `qdrant_points_delete` and Fase 3's `payload.py`/`vectors.py`), and the
 `PointVectorValue` type used by every tool that writes a point's vectors
-(`qdrant_points_upsert`, `qdrant_vectors_update`). Not a toolset itself —
-nothing here calls `ToolRegistry.register`.
+(`qdrant_points_upsert`, `qdrant_vectors_update`), and `page_offset`, used by
+every tool that pages through points (`qdrant_points_scroll`,
+`qdrant_collection_copy`). Not a toolset itself — nothing here calls
+`ToolRegistry.register`.
 """
 
 from __future__ import annotations
@@ -21,6 +23,18 @@ from qdrant_client.http.models import Filter, FilterSelector, PointIdsList, Spar
 PointVectorValue = (
     list[float] | list[list[float]] | dict[str, list[float] | SparseVector | list[list[float]]]
 )
+
+
+def page_offset(offset: object) -> int | str | None:
+    """A scroll page offset in a form that serializes cleanly.
+
+    The REST client only ever returns int/str/UUID/None here (never the
+    gRPC-only PointId protobuf variant, since this server never opts into
+    prefer_grpc) — stringify anything else defensively rather than assume.
+    """
+    if offset is None or isinstance(offset, int | str):
+        return offset
+    return str(offset)
 
 
 def build_points_selector(

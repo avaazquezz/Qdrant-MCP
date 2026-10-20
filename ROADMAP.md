@@ -414,7 +414,7 @@ Trabajo:
   vacío y llegaba a Qdrant (antes lo cortaba el `min_length` del vector denso). Lo detectó un
   test unitario; `VectorOrId` acota ahora ambas formas de lista y `[[]]`.
 
-### Fase 12 — `feat/aliases-and-introspection` → v2.2.0 (toolset `admin`) 🚧 Implementada en la rama, pendiente de PR/merge/tag
+### Fase 12 — `feat/aliases-and-introspection` → v2.2.0 (toolset `admin`) ✅ Cerrada (PR #33, tag `v2.2.0`)
 **Corrige una decisión de la Fase 5.** Allí los aliases se descartaron junto al cluster por
 "solo tener sentido en modo distribuido"; verificado en vivo (2026-10-20, single-node
 `v1.19.0`) que **no es cierto para aliases**: crear y listar un alias funciona. También
@@ -446,7 +446,7 @@ funcionan `collection_cluster_info` (shards locales, puntos, estado) y `get_opti
   resumen y optimizaciones en curso; `queued`/`completed`/`idle_segments` solo salen por la
   capa REST (`client.http.collections_api`), que es la que usa la tool.
 
-### Fase 13 — `feat/server-side-composites` → v2.3.0 (toolset `admin`; depende de la Fase 11)
+### Fase 13 — `feat/server-side-composites` → v2.3.0 (toolset `admin`; depende de la Fase 11) 🚧 Implementada en la rama, pendiente de PR/merge/tag
 Operaciones compuestas donde **los vectores no pasan por el contexto del LLM**. Código
 determinista, sin embeddings: compatible con el principio nº1.
 
@@ -457,7 +457,21 @@ determinista, sin embeddings: compatible con el principio nº1.
 - `qdrant_payload_schema_infer`: muestrea N puntos y devuelve, por clave de payload, tipos
   observados, si está indexada y, para campos con índice keyword, los valores más frecuentes
   (vía facet). Evita el fallo más común de un LLM con Qdrant: inventarse claves en los filtros.
-- Pendiente de decidir al abordar: tamaño de muestra por defecto y tope de `batch_size`.
+- Decidido al abordar: `copy` copia como máximo `max_points` (1000 por defecto, tope 100 000)
+  por llamada en lotes de `batch_size` (100, tope 1000); `schema_infer` muestrea 100 puntos
+  (tope 1000) y devuelve como mucho 200 claves. `copy` exige que el destino exista, rechaza
+  copiar una colección sobre sí misma (también vía alias) y, si un lote falla, el error dice
+  cuántos puntos se copiaron y desde qué `offset` reanudar.
+
+**Hallazgos verificados durante la Fase 13** (en vivo, `v1.19.0`):
+- `scroll(with_vectors=True)` + `upsert` conserva dense, sparse y multivector sin
+  conversión: el copy es un bucle de scroll y upsert, sin tipos especiales.
+- `facet` solo funciona con índices `keyword`, `integer`, `uuid` y `bool`; con `float`,
+  `datetime` y `text` responde 400 "No appropriate index for faceting". Por eso
+  `top_values` se limita a esos cuatro tipos en vez de intentarlo y tragarse el error.
+- El muestreo aleatorio (`SampleQuery`) funciona con vectores con nombre y con filtro. Las
+  claves de `payload_schema` usan la sintaxis `a.b` y `a[].b`; `schema_infer` genera las
+  mismas, para que lo que informa se pueda pegar tal cual en un filtro o un índice.
 
 ### Fase 14 — `feat/query-power` → v2.4.0
 `qdrant_query` expone hoy solo `Nearest` (vector literal o id) + `Fusion` (RRF/DBSF), con un

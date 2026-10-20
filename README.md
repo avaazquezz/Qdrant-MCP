@@ -60,8 +60,10 @@ finding that shaped a decision (in Spanish).
 - **Payload & vector editing** — set/overwrite/delete/clear payload, payload indexes, facet
   counting, named (dense/sparse) vector management, atomic batch operations.
 - **Snapshots** — per-collection and full-storage backup/restore.
-- **Aliases & introspection** — switch the collection a name points to without downtime, check
-  shard layout and whether the optimizer has finished indexing.
+- **Aliases, reindexing & introspection** — switch the collection a name points to without
+  downtime, copy points between collections server-side (vectors never pass through the model),
+  check shard layout and whether the optimizer has finished indexing, and profile the payload
+  keys a collection actually has before writing a filter.
 - **Observability** — telemetry, Prometheus metrics endpoint, resource quotas, self-diagnosed
   issues.
 - **Opt-in tool surface** — tools are grouped into toolsets you enable explicitly, so a client
@@ -214,10 +216,11 @@ tool at once:
   operations.
 - **`snapshots`** — collection and full-storage backup/restore.
 - **`observability`** — telemetry, metrics, quotas, and self-diagnosed issues.
-- **`admin`** — collection aliases (the basis of a zero-downtime reindex) and per-collection
-  shard layout and optimizer progress. Everything here works on a single node; distributed-cluster
-  administration (shard keys, resharding) is out of scope — see [ROADMAP.md](ROADMAP.md), Fase 5
-  and Fase 12.
+- **`admin`** — collection aliases, per-collection shard layout and optimizer progress, and two
+  composite operations that keep the data on the server: copying points between collections
+  (the missing half of a zero-downtime reindex) and profiling the payload keys a collection
+  really has. Everything here works on a single node; distributed-cluster administration (shard
+  keys, resharding) is out of scope — see [ROADMAP.md](ROADMAP.md), Fase 5 and Fase 12.
 
 The table below is generated directly from the live tool registry — run
 `uv run python scripts/gen_tools_doc.py` after adding or changing a tool to keep it in sync
@@ -265,6 +268,8 @@ The table below is generated directly from the live tool registry — run
 | `qdrant_alias_update` | `admin` | ❌ | ✅ | ❌ | Create, rename, re-point or delete aliases — the basis of a zero-downtime reindex: build the new collection, then switch the alias that clients use. |
 | `qdrant_collection_cluster_info` | `admin` | ✅ | ❌ | ✅ | Shard layout of a collection: how many shards it has and, for each local shard, its point count and replica state. |
 | `qdrant_collection_optimizations` | `admin` | ✅ | ❌ | ✅ | Progress of the background optimizer for a collection — answers "has it finished indexing?" and "why isn't the collection green?". |
+| `qdrant_collection_copy` | `admin` | ❌ | ✅ | ✅ | Copy points (all vectors — dense, sparse and multivector — and payload) from one collection to another of the same Qdrant instance, entirely server-side: the vectors never pass through the model. |
+| `qdrant_payload_schema_infer` | `admin` | ✅ | ❌ | ✅ | Profile the payload keys that actually occur in a collection, so filters can be written against real keys instead of guessed ones. |
 | `qdrant_snapshot_create` | `snapshots` | ❌ | ❌ | ❌ | Create a snapshot of one collection's current state. |
 | `qdrant_snapshot_list` | `snapshots` | ✅ | ❌ | ✅ | List the snapshots stored for one collection. |
 | `qdrant_snapshot_delete` | `snapshots` | ❌ | ✅ | ✅ | Delete a collection snapshot, freeing its disk space on the server — does not touch the live collection. |

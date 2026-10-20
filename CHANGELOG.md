@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-10-20
+
+Fase 13 — two composite operations in the `admin` toolset. Both are deterministic code over data
+Qdrant already holds (no embeddings), and both keep the data on the server instead of routing it
+through the model.
+
+### Added
+- `qdrant_collection_copy`: copies points — dense, sparse and multivector vectors, and payload —
+  from one collection to another of the same instance. Paginated and resumable (each call
+  copies at most `max_points`; repeat with `offset=next_offset` until `done`), idempotent
+  (upsert), with an optional filter. Refuses to copy a collection onto itself, including through
+  an alias; requires the target to exist; if a batch fails, the error says how many points were
+  copied and which `offset` to resume from. With `qdrant_alias_update` it completes the
+  zero-downtime reindex that Qdrant can't do in place (changing distance, quantization or HNSW).
+- `qdrant_payload_schema_infer`: profiles the payload keys present in a random sample — types
+  seen, whether each was an array, how many sampled points have it, whether it has a payload
+  index — using the key syntax filters expect (`a.b`, `a[].b`). For keyword/integer/uuid/bool
+  indexes it adds the most frequent values over the whole collection, and it lists indexed keys
+  that no sampled point has.
+
+### Changed
+- `QDRANT_MCP_TOOLSETS=admin` now registers 7 tools.
+
 ## [2.2.0] - 2026-10-20
 
 Fase 12 — the `admin` toolset stops being an empty reserved name. Everything below was verified

@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "mcp-qdrant",
   "display_name": "Qdrant MCP",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "MCP server that wraps the Qdrant vector database API as tools.",
   "author": {
     "name": "Adrián"
