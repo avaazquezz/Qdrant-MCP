@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from mcp_types import ToolAnnotations
-from pydantic import BaseModel, Field
+from pydantic import Field
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
     ContextPair,
@@ -49,7 +49,7 @@ from mcp_qdrant.tools.query_shared import (
     build_query_value,
 )
 from mcp_qdrant.tools.registry import ToolRegistry
-from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput
+from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput, StrictInput
 
 RecommendStrategyName = Literal["average_vector", "best_score", "sum_scores"]
 
@@ -124,7 +124,7 @@ _DISTANCE_MATRIX_OFFSETS_ANNOTATIONS = ToolAnnotations(
 )
 
 
-class QuerySpec(BaseModel):
+class QuerySpec(StrictInput):
     """One item of a `qdrant_query_batch` call — same shape as
     `qdrant_query`'s parameters, minus `collection_name`, `timeout_seconds` and
     `consistency` (those apply to the whole batch)."""
@@ -169,12 +169,12 @@ class QuerySpec(BaseModel):
         )
 
 
-class ContextPairInput(BaseModel):
+class ContextPairInput(StrictInput):
     positive: VectorOrId
     negative: VectorOrId
 
 
-class RecommendSpec(BaseModel):
+class RecommendSpec(StrictInput):
     """One item of a `qdrant_recommend_batch` call — same shape as
     `qdrant_recommend`'s parameters, minus `collection_name`."""
 
@@ -208,7 +208,7 @@ class RecommendSpec(BaseModel):
         )
 
 
-class DiscoverSpec(BaseModel):
+class DiscoverSpec(StrictInput):
     """One item of a `qdrant_discover_batch` call — same shape as
     `qdrant_discover`'s parameters, minus `collection_name`."""
 

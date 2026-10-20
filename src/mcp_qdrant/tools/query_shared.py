@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError
 from qdrant_client.http.models import (
     Expression,
     FormulaQuery,
@@ -30,7 +30,7 @@ from qdrant_client.http.models import (
     SparseVector,
 )
 
-from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput
+from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput, StrictInput
 
 _DenseVector = Annotated[list[float], Field(min_length=1)]
 # A query/example vector: a dense vector, a multivector (list of vectors,
@@ -53,7 +53,7 @@ _FUSION_BY_NAME: dict[FusionName, Fusion] = {"rrf": Fusion.RRF, "dbsf": Fusion.D
 _EXPRESSION: TypeAdapter[Any] = TypeAdapter(Expression)
 
 
-class WeightedRrfInput(BaseModel):
+class WeightedRrfInput(StrictInput):
     """Reciprocal Rank Fusion with tuning, instead of the plain `"rrf"` name:
     `weights` gives each prefetch stage's ranking a weight (one per stage, in
     order), `k` is the rank-smoothing constant."""
@@ -66,7 +66,7 @@ class WeightedRrfInput(BaseModel):
 FusionInput = FusionName | WeightedRrfInput
 
 
-class MmrInput(BaseModel):
+class MmrInput(StrictInput):
     """Maximal Marginal Relevance: re-orders the nearest candidates to trade
     relevance for diversity. `diversity` runs 0 (pure relevance) to 1 (most
     diverse). `candidates_limit` is how many nearest candidates it re-ranks; it
@@ -78,7 +78,7 @@ class MmrInput(BaseModel):
     candidates_limit: Annotated[int, Field(gt=0)] | None = None
 
 
-class FormulaInput(BaseModel):
+class FormulaInput(StrictInput):
     """A custom scoring formula applied over the results of `prefetch` stages.
     `expression` is typed loosely on purpose (the full grammar is a 35 KB
     recursive schema that would bloat every tool listing); it is validated
@@ -89,7 +89,7 @@ class FormulaInput(BaseModel):
     defaults: dict[str, Any] | None = None
 
 
-class PrefetchInput(BaseModel):
+class PrefetchInput(StrictInput):
     """One prefetch stage: an independent query narrowing candidates before
     the outer query reranks or fuses them. A stage is either a vector query
     (`query_vector`) or a fusion of its own nested `prefetch` stages
@@ -106,7 +106,7 @@ class PrefetchInput(BaseModel):
     limit: int | None = None
 
 
-class LookupFromInput(BaseModel):
+class LookupFromInput(StrictInput):
     """Resolve the query/context vector from a point id in another
     collection instead of passing it inline."""
 
@@ -175,6 +175,12 @@ def build_query_value(
 def build_prefetch_list(prefetch: list[PrefetchInput] | None) -> list[Prefetch] | None:
     if prefetch is None:
         return None
+    for stage in prefetch:
+        if (stage.query_vector is None) == (stage.fusion is None):
+            raise ToolError(
+                "A prefetch stage needs exactly one of `query_vector` or `fusion` (a fusion of "
+                "its own nested `prefetch` stages), not both/neither."
+            )
     return [
         Prefetch(
             prefetch=build_prefetch_list(p.prefetch),

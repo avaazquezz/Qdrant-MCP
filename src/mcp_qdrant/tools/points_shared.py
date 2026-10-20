@@ -37,10 +37,38 @@ def page_offset(offset: object) -> int | str | None:
     return str(offset)
 
 
+def filter_has_no_conditions(points_filter: Filter) -> bool:
+    """True if the filter constrains nothing — Qdrant treats that as "every point"."""
+
+    def blank(conditions: object) -> bool:
+        return conditions is None or (isinstance(conditions, list) and not conditions)
+
+    min_should = points_filter.min_should
+    return (
+        blank(points_filter.must)
+        and blank(points_filter.should)
+        and blank(points_filter.must_not)
+        and (min_should is None or blank(min_should.conditions))
+    )
+
+
+def reject_unconstrained_filter(points_filter: Filter, where: str = "`points_filter`") -> None:
+    """A filter with no conditions selects every point in the collection (verified:
+    `{}`, `{"must": []}` and `{"should": []}` all delete everything). On a tool that
+    changes or deletes points that is almost never what was meant — typically a
+    condition list that came out empty — so it is refused instead of obeyed."""
+    if filter_has_no_conditions(points_filter):
+        raise ToolError(
+            f"{where} has no conditions, so it would match every point in the collection. "
+            "Add at least one condition, or list the ids explicitly."
+        )
+
+
 def build_points_selector(
     ids: list[int | str] | None, points_filter: Filter | None
 ) -> PointIdsList | FilterSelector:
-    """Exactly one of `ids` or `points_filter` must be given."""
+    """Exactly one of `ids` or `points_filter` must be given, and a filter must
+    constrain something."""
     if (ids is None) == (points_filter is None):
         raise ToolError("Provide exactly one of `ids` or `points_filter`, not both/neither.")
     if ids is not None:
@@ -49,4 +77,5 @@ def build_points_selector(
         point_ids: list[int | str | UUID] = list(ids)
         return PointIdsList(points=point_ids)
     assert points_filter is not None
+    reject_unconstrained_filter(points_filter)
     return FilterSelector(filter=points_filter)

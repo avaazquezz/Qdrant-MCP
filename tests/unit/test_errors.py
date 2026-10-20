@@ -57,3 +57,31 @@ async def test_call_qdrant_translates_exhausted_transport_retries() -> None:
 
     with pytest.raises(ToolError):
         await call_qdrant(always_down)
+
+
+async def test_not_implemented_in_the_embedded_client_becomes_a_tool_error_with_its_message() -> (
+    None
+):
+    """With QDRANT_LOCAL_PATH the embedded client raises NotImplementedError for calls it
+    can't emulate (cluster info, optimizer progress). That used to surface as the SDK's
+    generic "Error executing tool", hiding the one sentence that explains it."""
+
+    async def local_mode_refuses() -> None:
+        raise NotImplementedError("Get optimizations is not supported in the local Qdrant.")
+
+    with pytest.raises(ToolError, match="not supported in the local Qdrant"):
+        await call_qdrant(local_mode_refuses)
+
+
+async def test_not_implemented_is_not_retried() -> None:
+    calls = 0
+
+    async def refuses() -> None:
+        nonlocal calls
+        calls += 1
+        raise NotImplementedError("nope")
+
+    with pytest.raises(ToolError):
+        await call_qdrant(refuses)
+
+    assert calls == 1

@@ -215,7 +215,7 @@ async def test_copy_into_an_incompatible_target_reports_where_to_resume(
             "qdrant_collection_copy", {"source_collection": src, "target_collection": dst}
         )
 
-    assert "Copy stopped after 0 points; resume with offset=None" in str(excinfo.value)
+    assert "Copy stopped after 0 points; start over (no offset)" in str(excinfo.value)
     assert (await client.count(dst)).count == 0
 
 

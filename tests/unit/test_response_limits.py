@@ -11,7 +11,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from qdrant_client import AsyncQdrantClient
 
-from mcp_qdrant.config import DEFAULT_MAX_LIMIT, Settings
+from mcp_qdrant.config import DEFAULT_MAX_LIMIT, MIN_MAX_LIMIT, Settings
 from mcp_qdrant.server import build_server
 from mcp_qdrant.tools import payload as payload_tools
 from mcp_qdrant.tools import points as points_tools
@@ -157,11 +157,11 @@ def test_check_limit_names_what_was_too_large_and_how_to_recover() -> None:
 
 
 async def test_build_server_applies_the_cap_from_settings() -> None:
-    server = build_server(Settings.from_env({"QDRANT_MCP_MAX_LIMIT": "5"}))
+    server = build_server(Settings.from_env({"QDRANT_MCP_MAX_LIMIT": "40"}))
 
-    with pytest.raises(ToolError, match="cap of 5 results"):
+    with pytest.raises(ToolError, match="cap of 40 results"):
         await server.call_tool(
-            "qdrant_query", {"collection_name": "docs", "query_vector": [0.1], "limit": 6}
+            "qdrant_query", {"collection_name": "docs", "query_vector": [0.1], "limit": 41}
         )
 
 
@@ -185,7 +185,46 @@ def test_max_limit_defaults_and_parses_from_the_environment() -> None:
     assert Settings.from_env({"QDRANT_MCP_MAX_LIMIT": " 250 "}).max_limit == 250
 
 
-@pytest.mark.parametrize("bad", ["abc", "1.5", "0", "-3"])
+@pytest.mark.parametrize("bad", ["abc", "1.5", "0", "-3", "29", "5"])
 def test_an_invalid_max_limit_fails_at_startup_not_on_the_first_call(bad: str) -> None:
-    with pytest.raises(ValueError, match="QDRANT_MCP_MAX_LIMIT|greater than 0"):
+    with pytest.raises(ValueError, match="QDRANT_MCP_MAX_LIMIT|greater than or equal to 30"):
         Settings.from_env({"QDRANT_MCP_MAX_LIMIT": bad})
+
+
+def test_the_smallest_allowed_cap_is_accepted() -> None:
+    assert Settings.from_env({"QDRANT_MCP_MAX_LIMIT": str(MIN_MAX_LIMIT)}).max_limit == 30
+
+
+# Every tool that checks the cap, called with ONLY its required arguments.
+_REQUIRED_ONLY: list[tuple[str, str, dict[str, Any]]] = [
+    ("qdrant_query", "query_points", {"query_vector": [0.1]}),
+    ("qdrant_points_scroll", "scroll", {}),
+    ("qdrant_recommend", "query_points", {"positive": [1]}),
+    ("qdrant_discover", "query_points", _DISCOVER),
+    ("qdrant_payload_facet", "facet", {"key": "city"}),
+    ("qdrant_query_groups", "query_points_groups", {"group_by": "d", "query_vector": [0.1]}),
+    ("qdrant_recommend_groups", "query_points_groups", {"group_by": "d", "positive": [1]}),
+    ("qdrant_query_batch", "query_batch_points", {"queries": [{"query_vector": [0.1]}] * 3}),
+    ("qdrant_recommend_batch", "query_batch_points", {"requests": [{"positive": [1]}] * 3}),
+    ("qdrant_discover_batch", "query_batch_points", {"requests": [_DISCOVER] * 3}),
+    ("qdrant_distance_matrix_pairs", "search_matrix_pairs", {}),
+    ("qdrant_distance_matrix_offsets", "search_matrix_offsets", {}),
+]
+
+
+@pytest.mark.parametrize(("tool", "method", "required"), _REQUIRED_ONLY)
+async def test_the_smallest_allowed_cap_never_refuses_a_tools_own_default_request(
+    tool: str, method: str, required: dict[str, Any]
+) -> None:
+    """The reason MIN_MAX_LIMIT exists: with a cap below what the defaults ask for, a call
+    that sets nothing beyond its required arguments would be refused. A new tool or a
+    raised default that breaks this fails here, which says to raise MIN_MAX_LIMIT."""
+    mock = AsyncMock()
+    server = _build(mock, max_limit=MIN_MAX_LIMIT)
+
+    try:
+        await server.call_tool(tool, {"collection_name": "docs", **required})
+    except ToolError as exc:
+        assert "cap of" not in str(exc), f"{tool}'s defaults exceed MIN_MAX_LIMIT: {exc}"
+
+    getattr(mock, method).assert_awaited_once()

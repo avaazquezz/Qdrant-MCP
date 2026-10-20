@@ -13,7 +13,7 @@ const ROWS = [
   {
     outcome: 'Fix the data in place instead of re-ingesting it.',
     tools: ['qdrant_payload_set', 'qdrant_payload_index_create', 'qdrant_payload_facet', 'qdrant_vectors_update', 'qdrant_points_batch_update'],
-    mechanism: 'Add an index to a live collection, count facets over a field, replace vectors by id, or run a batch of point operations atomically in the order given.',
+    mechanism: 'Add an index to a live collection, count facets over a field, replace vectors by id, or run a batch of point operations in the order given.',
   },
   {
     outcome: 'Back up before a migration and restore after it goes wrong.',

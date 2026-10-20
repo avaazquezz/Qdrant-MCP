@@ -23,6 +23,8 @@ from qdrant_client.http.models import (
     FacetValueHit,
     FieldCondition,
     Filter,
+    IntegerIndexParams,
+    IntegerIndexType,
     MatchValue,
     PayloadIndexInfo,
     PayloadSchemaType,
@@ -39,6 +41,7 @@ from mcp_qdrant.tools import composites as composites_tools
 from mcp_qdrant.tools.composites import (
     CollectionCopyResult,
     PayloadSchemaProfile,
+    _segment,
     _walk,
 )
 from mcp_qdrant.tools.registry import ToolRegistry
@@ -198,12 +201,47 @@ async def test_copy_between_an_alias_and_a_different_collection_is_allowed() -> 
 
 async def test_copy_requires_the_target_to_exist() -> None:
     mock = _copy_mock()
-    mock.collection_exists.return_value = False
+    mock.collection_exists.side_effect = lambda name: name != "dst"
     server = _build(cast(AsyncQdrantClient, mock))
 
     with pytest.raises(ToolError, match="create it first"):
         await _copy(server)
     mock.scroll.assert_not_awaited()
+
+
+async def test_copy_requires_the_source_to_exist_and_says_so_plainly() -> None:
+    mock = _copy_mock()
+    mock.collection_exists.side_effect = lambda name: name != "src"
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    with pytest.raises(ToolError) as excinfo:
+        await _copy(server)
+
+    assert "Source collection `src` doesn't exist" in str(excinfo.value)
+    assert "Copy stopped" not in str(excinfo.value)  # not a mid-copy failure
+    mock.scroll.assert_not_awaited()
+
+
+async def test_copy_failure_on_the_first_batch_says_to_start_over_not_offset_none() -> None:
+    mock = _copy_mock(([_record(1)], None))
+    mock.upsert.side_effect = _qdrant_error(400, "Wrong input: Vector dimension error")
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    with pytest.raises(ToolError) as excinfo:
+        await _copy(server)
+
+    message = str(excinfo.value)
+    assert "after 0 points; start over (no offset)" in message
+    assert "None" not in message  # no Python repr leaking into a message for a model
+
+
+async def test_copy_failure_quotes_a_string_offset_the_way_it_must_be_sent_back() -> None:
+    mock = _copy_mock(([_record(1)], None))
+    mock.upsert.side_effect = _qdrant_error(400, "boom")
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    with pytest.raises(ToolError, match=r'resume with offset="3f2b-uuid"'):
+        await _copy(server, offset="3f2b-uuid")
 
 
 async def test_copy_failure_reports_progress_and_the_offset_to_resume_from() -> None:
@@ -234,7 +272,7 @@ async def test_copy_of_a_missing_source_surfaces_qdrants_message() -> None:
 
 @pytest.mark.parametrize(
     "args",
-    [{"batch_size": 0}, {"batch_size": 1001}, {"max_points": 0}, {"max_points": 100_001}],
+    [{"batch_size": 0}, {"batch_size": 251}, {"max_points": 0}, {"max_points": 100_001}],
 )
 async def test_copy_rejects_out_of_range_sizes(args: dict[str, int]) -> None:
     mock = _copy_mock()
@@ -512,3 +550,109 @@ async def test_schema_infer_rejects_out_of_range_arguments(
     with pytest.raises(ToolError):
         await _infer(server, **args)
     mock.get_collection.assert_not_awaited()
+
+
+# --- keys Qdrant can parse ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("city", "city"),
+        ("x-y_z", "x-y_z"),
+        ("über", "über"),
+        ("1abc", "1abc"),
+        ("my key", '"my key"'),
+        ("user@email", '"user@email"'),
+        ("a/b", '"a/b"'),
+        ("a:b", '"a:b"'),
+        ("a+b", '"a+b"'),
+        ("a.b", '"a.b"'),  # a literal dot in a key, not a nested path
+        ("k[]", '"k[]"'),  # a literal key, not an array path
+        ("🔥", '"🔥"'),
+        ("", '""'),
+    ],
+)
+def test_segment_quotes_exactly_what_qdrants_filter_syntax_needs_quoted(
+    name: str, expected: str
+) -> None:
+    assert _segment(name) == expected
+
+
+def test_walk_emits_quoted_segments_inside_nested_and_array_paths() -> None:
+    assert _flatten(
+        {"my key": 1, "a.b": 2, "meta": {"first name": "x"}, "items": [{"unit price": 3}]}
+    ) == {
+        '"my key"': (["integer"], False),
+        '"a.b"': (["integer"], False),
+        'meta."first name"': (["string"], False),
+        'items[]."unit price"': (["integer"], False),
+    }
+
+
+def test_a_literal_dotted_key_and_a_nested_path_do_not_collapse_into_one_entry() -> None:
+    flattened = _flatten({"a.b": 1, "a": {"b": 2}})
+
+    assert set(flattened) == {'"a.b"', "a.b"}
+
+
+# --- facet only where Qdrant can facet ----------------------------------------------------
+
+
+async def test_schema_infer_skips_facet_for_a_range_only_integer_index_instead_of_aborting(
+    make_collection_info: Callable[..., CollectionInfo],
+) -> None:
+    mock = _infer_mock(
+        make_collection_info,
+        _sample({"n": 1, "city": "ny"}),
+        schema={"city": PayloadSchemaType.KEYWORD},
+    )
+    mock.get_collection.return_value.payload_schema["n"] = PayloadIndexInfo(
+        data_type=PayloadSchemaType.INTEGER,
+        params=IntegerIndexParams(type=IntegerIndexType.INTEGER, lookup=False, range=True),
+        points=10,
+    )
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    profile = await _infer(server, top_values=3)
+
+    by_key = {f.key: f for f in profile.fields}
+    assert by_key["n"].indexed is True and by_key["n"].top_values is None
+    assert by_key["city"].top_values is not None  # the facetable one still gets its values
+    mock.facet.assert_awaited_once_with("docs", key="city", limit=3)
+
+
+async def test_schema_infer_still_facets_an_integer_index_with_lookup_on_or_unspecified(
+    make_collection_info: Callable[..., CollectionInfo],
+) -> None:
+    mock = _infer_mock(make_collection_info, _sample({"a": 1, "b": 2}), schema={})
+    mock.get_collection.return_value.payload_schema["a"] = PayloadIndexInfo(
+        data_type=PayloadSchemaType.INTEGER,
+        params=IntegerIndexParams(type=IntegerIndexType.INTEGER, lookup=True, range=False),
+        points=10,
+    )
+    mock.get_collection.return_value.payload_schema["b"] = PayloadIndexInfo(
+        data_type=PayloadSchemaType.INTEGER, points=10
+    )
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    await _infer(server, top_values=3)
+
+    assert {c.kwargs["key"] for c in mock.facet.await_args_list} == {"a", "b"}
+
+
+async def test_schema_infer_matches_a_quoted_key_to_the_index_qdrant_reports_for_it(
+    make_collection_info: Callable[..., CollectionInfo],
+) -> None:
+    mock = _infer_mock(
+        make_collection_info,
+        _sample({"my key": 1}),
+        schema={'"my key"': PayloadSchemaType.INTEGER},
+    )
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    profile = await _infer(server, top_values=0)
+
+    (field,) = profile.fields
+    assert field.key == '"my key"' and field.indexed is True
+    assert profile.indexed_but_unseen == []

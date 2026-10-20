@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-10-20
+
+An independent review of the Fase 11–15 code (a second reader with no knowledge of my reasoning,
+told to reproduce rather than speculate) found real defects. I re-reproduced each against a live
+Qdrant `v1.19.0` before fixing it; the review also surfaced a false claim that had been in the
+tool descriptions since Fase 3.
+
+### Fixed
+- **A filter with no conditions deleted the whole collection.** `{}`, `{"must": []}` and
+  `{"should": []}` as `points_filter` select every point (all three reproduced: 0 points left),
+  and the "exactly one of `ids`/`points_filter`" guard accepted them. `qdrant_points_delete`, the
+  `qdrant_payload_*` mutators, `qdrant_vectors_delete` and filter-selected operations inside
+  `qdrant_points_batch_update` now refuse a filter that constrains nothing, naming the offending
+  operation; a batch sends nothing at all when one operation is refused.
+- `qdrant_points_batch_update` was described as **atomic**; it is not (a valid operation followed by
+  a failing one stays applied — verified). The description, tool title, README and website copy no
+  longer say so.
+- `qdrant_payload_schema_infer` aborted with an error if the collection had an integer payload index
+  created with `lookup: false` (Qdrant can't facet on it); it now decides by the index's parameters
+  and skips just that field's `top_values`.
+- `qdrant_payload_schema_infer` printed keys the filter syntax rejects: a key with a space, `@`, `/`,
+  `.` or an emoji needs double quotes (`"my key"`), and an unquoted literal key `k[]` is read as an
+  array path. Keys are now quoted where required — which is also how Qdrant reports index keys, so
+  such keys now match their index instead of showing up as unindexed.
+- Unknown keys in nested inputs were silently ignored: a prefetch stage given Qdrant's own `filter`
+  (instead of `query_filter`) returned **unfiltered** results, `mmr: {"candidate_limit": ...}` ran
+  MMR with its defaults, a `payloads` typo in an upserted point dropped the payload. These inputs
+  (`PrefetchInput`, `MmrInput`, `WeightedRrfInput`, `FormulaInput`, `LookupFromInput`, the batch
+  `*Spec` items, `ContextPairInput`, `PointInput`, `PointVectorInput`) now reject unknown keys.
+- The compact `Filter` / `SearchParams` schemas advertised by the server rejected inputs the real
+  model accepts: explicit `null` for an unset field (`{"must": null}`, `{"hnsw_ef": null}`) and
+  `search_params.idf` given as `"global"`. A client that validates arguments against the schema would
+  have refused those legal calls. They now accept them, and the nested `quantization`/`acorn` objects
+  reject unknown keys like the model.
+- With `QDRANT_LOCAL_PATH` (embedded Qdrant), `qdrant_collection_cluster_info` and
+  `qdrant_collection_optimizations` surfaced as the SDK's generic "Error executing tool"; the
+  embedded client's `NotImplementedError` is now translated, so the message ("not supported in the
+  local Qdrant") reaches the caller.
+- `qdrant_collection_copy`: `batch_size` is capped at 250 (was 1000; with 3072-dimension vectors a
+  1000-point batch exceeded Qdrant's 32 MiB request limit, and resuming with the same arguments
+  failed again); a missing source collection is reported as such rather than as "Copy stopped after
+  0 points"; offsets in error messages are written as they must be sent back (`3`, `"3f2b…"`), not as
+  Python reprs.
+- A prefetch stage with neither `query_vector` nor `fusion` now says what a *stage* needs instead of
+  listing the five top-level query modes.
+
+### Changed
+- `QDRANT_MCP_MAX_LIMIT` must be at least 30. Below that, a call with only its required arguments
+  was refused (the largest default request is `limit` 10 × `group_size` 3). A test calls every capped
+  tool with only its required arguments at this minimum.
+- Stricter inputs (above) can reject a call that used to "work" by ignoring a misspelled key.
+
 ## [2.5.0] - 2026-10-20
 
 Fase 15 — less context, no accidental floods. Measured before touching anything: the `tools/list`
