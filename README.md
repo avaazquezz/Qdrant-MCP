@@ -7,6 +7,8 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/mcp-qdrant.svg)](https://pypi.org/project/mcp-qdrant/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+[![Qdrant MCP server](https://mcprush.com/badge/qdrant-mcp/card.svg)](https://mcprush.com/to/qdrant-mcp?ref=badge)
+
 **A Model Context Protocol (MCP) server that exposes the full [Qdrant](https://qdrant.tech)
 vector database API as tools** — collection management, advanced hybrid search, payload and
 vector editing, snapshots, and server observability. Not just `store`/`find`.
