@@ -72,8 +72,8 @@ finding that shaped a decision (in Spanish).
   keys a collection actually has before writing a filter.
 - **Observability** — telemetry, Prometheus metrics endpoint, resource quotas, self-diagnosed
   issues.
-- **Opt-in tool surface** — tools are grouped into toolsets you enable explicitly, so a client
-  isn't handed 60+ overlapping tools by default.
+- **Opt-in tool surface** — the 56 tools are grouped into toolsets you enable explicitly, so a
+  client isn't handed all of them by default (only the 13-tool `core` toolset is on).
 - **Read-only guard** — one flag removes every mutating tool from the registry entirely.
 - **Easy on the model's context** — the schemas the server advertises are compact (Qdrant's
   verbose `Filter` and configuration models are summarized, validation unchanged), so the
