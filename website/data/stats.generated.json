@@ -1,5 +1,5 @@
 {
-  "version": "2.10.0",
+  "version": "2.11.0",
   "tools": 58,
   "toolsets": {
     "core": 13,
@@ -11,10 +11,14 @@
   },
   "read_only_tools": 33,
   "destructive_tools": 19,
-  "tests": 711,
+  "tests": 763,
   "core_schema_kb": 48,
   "catalog_schema_kb": 178,
   "releases": [
+    {
+      "version": "2.11.0",
+      "date": "2026-11-04"
+    },
     {
       "version": "2.10.0",
       "date": "2026-11-04"
@@ -104,6 +108,6 @@
       "date": "2026-08-30"
     }
   ],
-  "source_lines": 4586,
-  "test_lines": 7616
+  "source_lines": 4696,
+  "test_lines": 7685
 }
