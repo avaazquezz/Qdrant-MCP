@@ -109,7 +109,8 @@ FILTER_DESCRIPTION = (
     "holds), `must_not` (none holds) or `min_should` ({conditions, min_count}); each takes "
     'a list of conditions or a single one. A condition is one of: {"key": k, "match": M} '
     'where M is exactly one of {"value": v}, {"any": [..]}, {"except": [..]}, {"text": s}, '
-    '{"text_any": s}, {"phrase": s}, {"prefix": s}; {"key": k, "range": {"lt"|"lte"|"gt"|'
+    '{"text_any": s}, {"phrase": s}, {"prefix": s}, {"substring": s}; {"key": k, "range": '
+    '{"lt"|"lte"|"gt"|'
     '"gte": number or datetime}}; {"key": k, "values_count": {"lt"|"lte"|"gt"|"gte": n}}; '
     '{"key": k, "geo_radius": {"center": {"lat", "lon"}, "radius": meters}}; {"key": k, '
     '"geo_bounding_box": {"top_left", "bottom_right"}}; {"key": k, "geo_polygon": '

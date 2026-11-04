@@ -144,7 +144,7 @@ async def test_alias_update_edge_behaviors_documented_in_the_tool(
         )
 
     # Creating an alias for a missing collection fails with Qdrant's own message.
-    with pytest.raises(ToolError, match="doesn't exist"):
+    with pytest.raises(ToolError, match="does(n't| not) exist"):
         await server.call_tool(
             "qdrant_alias_update",
             {
@@ -165,18 +165,19 @@ async def test_alias_update_edge_behaviors_documented_in_the_tool(
     assert alias not in _aliases(await _call(server, "qdrant_alias_list", {}))
 
 
-async def test_alias_batch_is_not_rolled_back_when_a_later_operation_fails(
+async def test_alias_batch_is_all_or_nothing(
     env: tuple[MCPServer[None], AsyncQdrantClient, str],
 ) -> None:
-    """Pins the behavior the `qdrant_alias_update` docstring warns about. If a
-    future Qdrant makes batches all-or-nothing, this fails and the docstring
-    (plus the ROADMAP finding) should be updated, not this test silenced."""
+    """Pins the behavior the `qdrant_alias_update` docstring states. Qdrant
+    1.19 kept the earlier operations applied; 1.20 applies none. If that
+    changes again, update the docstring (and the ROADMAP finding), don't
+    silence this test."""
     server, client, suffix = env
     a = f"mcp-test-a-{suffix}"
     await _make_collection(client, a, "A")
     first = f"mcp-test-first-{suffix}"
 
-    with pytest.raises(ToolError, match="doesn't exist"):
+    with pytest.raises(ToolError, match="does(n't| not) exist"):
         await server.call_tool(
             "qdrant_alias_update",
             {
@@ -187,10 +188,20 @@ async def test_alias_batch_is_not_rolled_back_when_a_later_operation_fails(
             },
         )
 
-    assert first in _aliases(await _call(server, "qdrant_alias_list", {}))
-    await _call(
-        server, "qdrant_alias_update", {"operations": [{"delete_alias": {"alias_name": first}}]}
-    )
+    assert first not in _aliases(await _call(server, "qdrant_alias_list", {}))
+
+    # Also when the failure only exists because of an earlier operation's effect.
+    with pytest.raises(ToolError, match="already exists"):
+        await server.call_tool(
+            "qdrant_alias_update",
+            {
+                "operations": [
+                    {"create_alias": {"collection_name": a, "alias_name": first}},
+                    {"rename_alias": {"old_alias_name": first, "new_alias_name": a}},
+                ]
+            },
+        )
+    assert first not in _aliases(await _call(server, "qdrant_alias_list", {}))
 
 
 async def test_collection_cluster_info_on_a_single_node(
@@ -208,7 +219,7 @@ async def test_collection_cluster_info_on_a_single_node(
     assert info["remote_shards"] == []
     assert [s["points_count"] for s in info["local_shards"]] == [1]
 
-    with pytest.raises(ToolError, match="doesn't exist"):
+    with pytest.raises(ToolError, match="does(n't| not) exist"):
         await server.call_tool(
             "qdrant_collection_cluster_info", {"collection_name": f"nope-{suffix}"}
         )
@@ -246,7 +257,7 @@ async def test_collection_optimizations_summary_and_detail_lists(
     assert isinstance(detailed["completed"], list)
     assert isinstance(detailed["idle_segments"], list)
 
-    with pytest.raises(ToolError, match="doesn't exist"):
+    with pytest.raises(ToolError, match="does(n't| not) exist"):
         await server.call_tool(
             "qdrant_collection_optimizations", {"collection_name": f"nope-{suffix}"}
         )

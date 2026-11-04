@@ -71,9 +71,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
           selected with `using`. Add `mmr` (`diversity` 0..1,
           `candidates_limit`) to re-order the nearest candidates for diversity:
           set `candidates_limit` well above `limit` (it defaults to `limit`,
-          which leaves MMR nothing to choose from), and don't page an MMR query
-          with `offset` — it is applied inside the `limit` re-ranked results
-          (`offset` 1 with `limit` 2 returns one point); raise `limit` instead.
+          which leaves MMR nothing to choose from). `offset` pages through the
+          MMR ranking on Qdrant 1.20 (verified; older servers applied it inside
+          the `limit` re-ranked results, so raise `limit` there instead).
         - `fusion` + 2+ `prefetch` stages — combine retrieval strategies:
           `"rrf"` (Reciprocal Rank Fusion), `"dbsf"` (Distribution-Based Score
           Fusion), or `{"method": "rrf", "weights": [2, 1], "k": 60}` for RRF
