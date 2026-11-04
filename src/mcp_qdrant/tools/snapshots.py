@@ -20,13 +20,16 @@ live API call — so no such tool exists here.
 
 from __future__ import annotations
 
+from urllib.parse import quote, urlsplit
+
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import BaseModel
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import SnapshotDescription, SnapshotPriority
 
-from mcp_qdrant.tools.errors import call_qdrant
+from mcp_qdrant.config import url_origin
+from mcp_qdrant.tools.errors import call_qdrant, require_result
 from mcp_qdrant.tools.registry import ToolRegistry
 
 _CREATE_ANNOTATIONS = ToolAnnotations(
@@ -128,7 +131,31 @@ def _require_qdrant_url(qdrant_url: str | None) -> str:
     return qdrant_url
 
 
-def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str | None) -> None:
+def _check_recover_location(location: str, allowed: set[tuple[str, str, int]]) -> None:
+    """The Qdrant server itself fetches `location`, so an unchecked URL lets
+    whoever drives the model make it request any address it can reach (SSRF:
+    internal services, cloud metadata endpoints). Only the server's own disk and
+    origins the operator listed are allowed."""
+    if urlsplit(location).scheme == "file":
+        return
+    if url_origin(location) not in allowed:
+        raise ToolError(
+            f"`location` {location!r} is not allowed: use a `file://` path on the Qdrant "
+            "server, a URL on QDRANT_URL's own origin (e.g. from `qdrant_snapshot_download`), "
+            "or an origin the operator listed in QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS."
+        )
+
+
+def register(
+    registry: ToolRegistry,
+    client: AsyncQdrantClient,
+    qdrant_url: str | None,
+    allowed_origins: tuple[str, ...] = (),
+) -> None:
+    allowed_recover_origins = {
+        origin for origin in map(url_origin, (qdrant_url or "", *allowed_origins)) if origin
+    }
+
     async def qdrant_snapshot_create(collection_name: str) -> SnapshotDescription:
         """Create a snapshot of one collection's current state.
 
@@ -137,8 +164,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
         snapshot = await call_qdrant(lambda: client.create_snapshot(collection_name))
         # Only None when wait=False (not exposed here) races ahead of the
         # server actually finishing the snapshot.
-        assert snapshot is not None
-        return snapshot
+        return require_result(snapshot, "snapshot description")
 
     async def qdrant_snapshot_list(collection_name: str) -> list[SnapshotDescription]:
         """List the snapshots stored for one collection.
@@ -177,9 +203,13 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
         reach it from outside — this tool does not try to guess that.
         `checksum` (SHA256) verifies integrity before recovering; `api_key`
         authenticates to a *remote* snapshot host, not this Qdrant instance.
+        Allowed locations: `file://`, QDRANT_URL's own origin, and the origins
+        the operator listed in QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS — anything
+        else is refused before Qdrant is asked to fetch it.
 
         Example: {"collection_name": "docs", "location": "http://localhost:6333/collections/docs/snapshots/docs-....snapshot"}
         """
+        _check_recover_location(location, allowed_recover_origins)
         recovered = await call_qdrant(
             lambda: client.recover_snapshot(
                 collection_name,
@@ -208,7 +238,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
             name=snapshot.name,
             size=snapshot.size,
             checksum=snapshot.checksum,
-            url=f"{url}/collections/{collection_name}/snapshots/{snapshot.name}",
+            url=(
+                f"{url}/collections/{quote(collection_name, safe='')}"
+                f"/snapshots/{quote(snapshot.name, safe='')}"
+            ),
         )
 
     async def qdrant_storage_snapshot_create() -> SnapshotDescription:
@@ -218,8 +251,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
         Example: {}
         """
         snapshot = await call_qdrant(lambda: client.create_full_snapshot())
-        assert snapshot is not None
-        return snapshot
+        return require_result(snapshot, "snapshot description")
 
     async def qdrant_storage_snapshot_list() -> list[SnapshotDescription]:
         """List the full-storage snapshots stored on the server.
@@ -254,7 +286,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
             name=snapshot.name,
             size=snapshot.size,
             checksum=snapshot.checksum,
-            url=f"{url}/snapshots/{snapshot.name}",
+            url=f"{url}/snapshots/{quote(snapshot.name, safe='')}",
         )
 
     registry.register(qdrant_snapshot_create, toolset="snapshots", annotations=_CREATE_ANNOTATIONS)

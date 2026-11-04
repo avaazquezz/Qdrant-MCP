@@ -74,3 +74,14 @@ def test_removed_byo_flag_fails_loudly_instead_of_being_ignored() -> None:
 
 def test_falsy_byo_flag_is_harmless() -> None:
     assert Settings.from_env({"QDRANT_MCP_BYO": "0"}).transport == "stdio"
+
+
+def test_snapshot_allowed_origins_parsing_and_validation() -> None:
+    assert Settings.from_env({}).snapshot_allowed_origins == ()
+    settings = Settings.from_env(
+        {"QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS": " https://a.example.com , http://b:8080 ,"}
+    )
+    assert settings.snapshot_allowed_origins == ("https://a.example.com", "http://b:8080")
+    for bad in ("ftp://a.example.com", "http://b:99999", "a.example.com"):
+        with pytest.raises(ValueError, match="SNAPSHOT_ALLOWED_ORIGINS"):
+            Settings.from_env({"QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS": bad})

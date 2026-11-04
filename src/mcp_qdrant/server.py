@@ -66,6 +66,8 @@ def build_server(settings: Settings | None = None) -> MCPServer[None]:
     )
     for module in _TOOL_MODULES:
         module.register(registry, client)
-    snapshots_tools.register(registry, client, settings.qdrant_url)
+    snapshots_tools.register(
+        registry, client, settings.qdrant_url, settings.snapshot_allowed_origins
+    )
     observability_tools.register(registry, client, settings.qdrant_url)
     return server
