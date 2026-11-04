@@ -879,6 +879,23 @@ Alcance aprobado (2026-11-04): que la web diga la verdad y reproduzca escenarios
   son de longitud de línea y viudas en los textos más largos de la bitácora, dentro del diseño
   aprobado; no se tocaron.
 
+### Fase 23 — `feat/compact-text` → v2.12.0
+**Primero medir** (mismo servidor sonda que en la Fase 19, ahora en claude.ai y en los servidores
+locales de Desktop alcanzados desde claude.ai): esos clientes entregan al modelo el texto `content`,
+no `structuredContent`, y el SDK lo escribe con `indent=2`. La Fase 19 descartó compactarlo midiendo
+solo Claude Code; para estos clientes sí ahorra.
+- `CompactTextMCPServer` (`server.py`) sustituye el texto por el JSON compacto de `structuredContent`,
+  con el mismo serializador que el SDK (`pydantic_core.to_json`) sin indentación. Un único punto: todas
+  las tools pasan por `call_tool`; errores (sin `structuredContent`) intactos.
+- Medido: 10 puntos con payload 2.848 → 1.556 caracteres (−45 %); con vectores de 768 dims
+  229.782 → 159.300 (−31 %: ahí pesan los dígitos). Tokens sin medir.
+- Efecto colateral verificado: las 9 tools que devuelven lista o booleano mandaban un bloque por
+  elemento (y ninguno con la lista vacía); ahora un bloque `{"result": ...}`, igual que su `outputSchema`.
+- Las `instructions` no llegan nunca a Desktop local: la guía que importa vive en las descripciones
+  (el doctor ahora remite a `qdrant_search_quality_eval`).
+- Tests: unit con el cliente embebido (texto == JSON compacto, sin escapar `ñ`) y el de arranque del
+  `.mcpb` comprueba el texto compacto por el cable.
+
 ## Versionado
 
 | Versión | Fase cerrada |
@@ -906,6 +923,7 @@ Alcance aprobado (2026-11-04): que la web diga la verdad y reproduzca escenarios
 | v2.9.0 | 19 — menos contexto: selección de claves del payload |
 | v2.10.0 | 20 — asesor: doctor y evaluación de calidad de búsqueda |
 | v2.11.0 | 21 — guía: instructions, prompts MCP, títulos |
+| v2.12.0 | 23 — texto compacto para claude.ai y Desktop |
 
 ---
 *Catálogo de endpoints verificado contra `api.qdrant.tech/master/llms.txt` y el README de

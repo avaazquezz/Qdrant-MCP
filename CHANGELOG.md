@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-11-04
+
+Less context in claude.ai and Claude Desktop. Measured with the same probe server as in 2.9.0, now
+in those clients: claude.ai's custom connectors and Desktop's local servers (reached from
+claude.ai) hand the model a tool's text `content`, not its `structuredContent` — and the SDK writes
+that text as JSON indented by two spaces. Claude Code is unchanged: it reads `structuredContent`.
+
+### Changed
+- A tool's text `content` is now the compact JSON of its `structuredContent` (same data, no
+  indentation, non-ASCII left as is). Ten points with payload: 2,848 → 1,556 characters; with 768-d
+  vectors: 229,782 → 159,300.
+- Tools that return a list or a boolean send it as one text block, `{"result": ...}`, matching
+  their `outputSchema` (it was one block per item, or a bare `true`). An empty list — e.g.
+  `qdrant_snapshot_list` with no snapshots — used to arrive as no text at all.
+- `qdrant_collection_doctor`'s description now points to `qdrant_search_quality_eval` for how well
+  search actually performs: the server's `instructions`, which said so, never reach Desktop's local
+  servers.
+
 ## [2.11.0] - 2026-11-04
 
 Guidance: what the server tells the model beyond each tool. Measured first in a real Claude Code
