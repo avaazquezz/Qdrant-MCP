@@ -26,7 +26,7 @@ const paused = ref(false)
 // Palette: the panel ground and the page's only accent. `spot` means "measured".
 const INK = '#E9E6DD'
 const DIM = '#9298A8'
-const SPOT = '#E0334A' // spot, lifted a little so it keeps AA contrast on the dark panel
+const SPOT = '#EA5A68' // spot, lifted to 5.5:1 on the dark panel (#E0334A measured 4.27:1, under AA)
 const LINE = '#2A2E38'
 
 const COUNT = 360

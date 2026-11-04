@@ -39,7 +39,7 @@ function highlight(json: string, accent: boolean): string {
     (_, str: string | undefined, colon: string | undefined, lit: string | undefined, num: string | undefined) => {
       if (str) return colon ? `<span class="text-panel-dim">${str}</span>${colon}` : `<span class="text-panel-ink">${str}</span>`
       const token = (lit ?? num) as string
-      return accent ? `<span class="text-[#E0334A]">${token}</span>` : token
+      return accent ? `<span class="text-[#EA5A68]">${token}</span>` : token
     }
   )
 }
@@ -178,7 +178,7 @@ watch(
             <span v-if="meta.read_only" class="border border-panel-line px-1.5 py-0.5 text-ordinal font-normal text-panel-dim">
               {{ copy.tools.badges.readOnly }}
             </span>
-            <span v-if="meta.destructive" class="border border-[#E0334A] px-1.5 py-0.5 text-ordinal font-normal text-[#E0334A]">
+            <span v-if="meta.destructive" class="border border-[#EA5A68] px-1.5 py-0.5 text-ordinal font-normal text-[#EA5A68]">
               {{ copy.tools.badges.destructive }}
             </span>
           </template>
@@ -199,10 +199,10 @@ watch(
         <div class="min-h-[6rem]">
           <p class="mb-1.5 flex items-center gap-2 font-mono text-ordinal uppercase tracking-[0.14em] text-panel-dim">
             {{ labels.result }}
-            <span v-if="shown.running" class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#E0334A]" aria-hidden="true" />
+            <span v-if="shown.running" class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#EA5A68]" aria-hidden="true" />
             <span
               v-if="shown.resultVisible && !step.ok"
-              class="border border-[#E0334A] px-1.5 py-0.5 text-[#E0334A]"
+              class="border border-[#EA5A68] px-1.5 py-0.5 text-[#EA5A68]"
             >
               {{ labels.refused }}
             </span>

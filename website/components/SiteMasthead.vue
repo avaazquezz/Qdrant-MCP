@@ -27,7 +27,7 @@ const links = [
         mcp-qdrant
       </a>
 
-      <nav :aria-label="copy.a11y.sections" class="hidden flex-1 justify-center md:flex">
+      <nav :aria-label="copy.a11y.sections" class="hidden flex-1 justify-center lg:flex">
         <ul class="flex items-center gap-1">
           <li v-for="link in links" :key="link.id">
             <a
@@ -39,7 +39,7 @@ const links = [
           </li>
         </ul>
       </nav>
-      <div class="flex-1 md:hidden" />
+      <div class="flex-1 lg:hidden" />
 
       <a
         :href="alternate.href"
@@ -65,7 +65,7 @@ const links = [
     </div>
 
     <!-- On small screens the section links become a scrollable row: nothing is hidden behind a menu. -->
-    <nav :aria-label="copy.a11y.sections" class="border-t border-ink/20 md:hidden">
+    <nav :aria-label="copy.a11y.sections" class="border-t border-ink/20 lg:hidden">
       <ul class="flex gap-1 overflow-x-auto px-3 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <li v-for="link in links" :key="link.id" class="shrink-0">
           <a :href="`#${link.id}`" class="block px-2.5 py-2 text-micro text-graphite">
