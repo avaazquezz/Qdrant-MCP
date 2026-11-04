@@ -269,7 +269,7 @@ The table below is generated directly from the live tool registry — run
 | `qdrant_payload_delete` | `payload` | ❌ | ✅ | ✅ | Delete specific payload keys from selected points — exactly one of `ids`/`points_filter`. |
 | `qdrant_payload_clear` | `payload` | ❌ | ✅ | ✅ | Wipe the entire payload of selected points, keeping their vectors — exactly one of `ids`/`points_filter`. |
 | `qdrant_payload_facet` | `payload` | ✅ | ❌ | ✅ | Count distinct values of a payload field across the collection (or a filtered subset) — e.g. how many points per `city`. |
-| `qdrant_payload_index_create` | `payload` | ❌ | ❌ | ✅ | Create a payload index on `field_name`, speeding up filters that use it. |
+| `qdrant_payload_index_create` | `payload` | ❌ | ✅ | ✅ | Create a payload index on `field_name`, speeding up filters that use it. |
 | `qdrant_payload_index_delete` | `payload` | ❌ | ✅ | ✅ | Delete the payload index on `field_name`. |
 | `qdrant_collection_vector_create` | `payload` | ❌ | ❌ | ✅ | Add a new named vector (dense or sparse) to a collection that already has points, without touching them. |
 | `qdrant_collection_vector_delete` | `payload` | ❌ | ✅ | ✅ | Remove a named vector (dense or sparse) from a collection — points keep their other vectors and payload. |
@@ -286,16 +286,16 @@ The table below is generated directly from the live tool registry — run
 | `qdrant_snapshot_create` | `snapshots` | ❌ | ❌ | ❌ | Create a snapshot of one collection's current state. |
 | `qdrant_snapshot_list` | `snapshots` | ✅ | ❌ | ✅ | List the snapshots stored for one collection. |
 | `qdrant_snapshot_delete` | `snapshots` | ❌ | ✅ | ✅ | Delete a collection snapshot, freeing its disk space on the server — does not touch the live collection. |
-| `qdrant_snapshot_recover` | `snapshots` | ❌ | ✅ | ✅ | Overwrite `collection_name` with the state captured in a snapshot — everything written since that snapshot is lost. |
+| `qdrant_snapshot_recover` | `snapshots` | ❌ | ✅ | ✅ | Restore the points (vectors and payload) captured in a snapshot into `collection_name` — points written since the snapshot are lost. |
 | `qdrant_snapshot_download` | `snapshots` | ✅ | ❌ | ✅ | Confirm a collection snapshot exists and return where to fetch it from — this tool does not transfer the (potentially huge) snapshot file itself; download it yourself (e.g. `curl`) from the returned `url`. |
-| `qdrant_storage_snapshot_create` | `snapshots` | ❌ | ❌ | ❌ | Create a snapshot of the whole storage (every collection and server config), not just one collection. |
+| `qdrant_storage_snapshot_create` | `snapshots` | ❌ | ❌ | ❌ | Create a snapshot of the whole storage: a snapshot of every collection plus the alias mapping (verified: no server configuration is included), not just one collection. |
 | `qdrant_storage_snapshot_list` | `snapshots` | ✅ | ❌ | ✅ | List the full-storage snapshots stored on the server. |
 | `qdrant_storage_snapshot_delete` | `snapshots` | ❌ | ✅ | ✅ | Delete a full-storage snapshot, freeing its disk space. |
 | `qdrant_storage_snapshot_download` | `snapshots` | ✅ | ❌ | ✅ | Confirm a full-storage snapshot exists and return where to fetch it from — same caveat as `qdrant_snapshot_download`: this tool does not transfer the file itself. |
-| `qdrant_telemetry` | `observability` | ✅ | ❌ | ✅ | Server-wide telemetry: build info, per-collection stats, request counters, memory and hardware usage. |
+| `qdrant_telemetry` | `observability` | ✅ | ❌ | ✅ | Server-wide telemetry: build info, the number of collections and request counters by default; pass `details_level` 1 or more for per-collection stats, memory and hardware usage (verified: they are null at the default level). |
 | `qdrant_metrics_prometheus` | `observability` | ✅ | ❌ | ✅ | Return the URL where Qdrant serves Prometheus-format metrics — this tool does not fetch the metrics themselves (they're plain text, not JSON); point your Prometheus scraper at the returned `url` instead. |
 | `qdrant_quotas_get` | `observability` | ✅ | ❌ | ✅ | Current server-wide resource quotas (memory/disk limits) and actual usage. |
-| `qdrant_quotas_set` | `observability` | ❌ | ❌ | ✅ | Update server-wide resource quotas. |
+| `qdrant_quotas_set` | `observability` | ❌ | ✅ | ✅ | Replace the server-wide resource quotas. |
 | `qdrant_issues_list` | `observability` | ✅ | ❌ | ✅ | List the issues Qdrant has detected about its own configuration (e.g. a heavily-filtered field with no payload index). |
 | `qdrant_issues_clear` | `observability` | ❌ | ✅ | ✅ | Clear all accumulated issues. |
 <!-- TOOLS_TABLE_END -->

@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-11-04
+
+An independent reviewer audited every behavioral claim in the tool descriptions written before
+Fase 12 (the later ones were already pinned by tests) against a live Qdrant `v1.20.0`; I
+re-reproduced each finding before changing anything. A tool description is what a model reads as
+fact, so these were bugs. Each corrected claim is now pinned by an integration test.
+
+### Fixed
+- `qdrant_quotas_set` said "only the fields you pass are changed". Qdrant **replaces the whole
+  config**: an omitted field is reset and `enabled` becomes false, so a "partial" update silently
+  turned quota enforcement off. The description says so, and the tool is now marked destructive.
+- `qdrant_payload_set`/`_overwrite`/`_delete`/`_clear` and `qdrant_vectors_update`/`_delete`: an id
+  that doesn't exist fails the call ("No point with id … found") **yet the ids that do exist in the
+  same call are still written**. The descriptions now warn to re-read before retrying.
+- `qdrant_payload_index_create` silently replaces an existing index on the field with another
+  schema (integer → keyword drops range filtering); described, and marked destructive.
+- Deleting a snapshot that doesn't exist is an error, not `deleted: false` as documented.
+- `qdrant_snapshot_recover` on an existing collection restores its points but keeps the current
+  configuration, payload indexes and aliases; it doesn't "overwrite the collection" with the
+  snapshot's state.
+- `qdrant_storage_snapshot_create` holds every collection plus the alias mapping, not "server
+  config".
+- `qdrant_telemetry` returns memory, hardware and per-collection stats only with `details_level` ≥ 1.
+- `qdrant_recommend` with only `negative` examples needs `strategy` `best_score` or `sum_scores`; the
+  default `average_vector` rejects it.
+- Documented gaps a model would trip over: `qdrant_payload_facet` needs a keyword/integer/uuid/bool
+  index, a query by point id leaves that point out of the results, and `qdrant_points_upsert` with
+  `update_filter` still inserts ids that don't exist yet.
+
 ## [2.7.0] - 2026-11-04
 
 Robustness and security pass, and the move to Qdrant 1.20 (`qdrant-client` 1.20.0, CI against

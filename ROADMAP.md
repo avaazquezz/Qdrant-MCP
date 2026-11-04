@@ -702,6 +702,26 @@ e inserción, opt-in, sin parsear documentos ni decidir chunking).
   un modelo denso sin fastembed da un `ValueError` con mensaje claro, que ahora se traduce. Por eso no
   hizo falta el guardia específico que preveía el plan.
 
+### Fase 17b — `fix/behavior-audit` → v2.7.1
+Revisor independiente, solo lectura, con su propio Qdrant `v1.20.0` en otro puerto y la orden de
+reproducir y no especular, sobre todas las afirmaciones de comportamiento anteriores a la Fase 12
+(la deuda anotada en la 15b). Reproduje cada hallazgo antes de tocar nada. Las tools están bien; las
+descripciones no:
+
+- **6 afirmaciones falsas.** `qdrant_quotas_set` no hace merge: reemplaza la configuración entera y
+  un campo omitido se resetea (`enabled` pasa a false). Borrar un snapshot inexistente da error, no
+  `deleted: false`. `qdrant_snapshot_recover` sobre una colección existente restaura los puntos pero
+  conserva su configuración, índices de payload y aliases. El snapshot de storage contiene las
+  colecciones y el mapa de aliases, no "la configuración del servidor". La telemetría solo trae
+  memoria, hardware y estadísticas por colección con `details_level` ≥ 1. `qdrant_recommend` solo con
+  `negative` exige `strategy` `best_score`/`sum_scores`.
+- **2 annotations mal puestas:** `qdrant_quotas_set` y `qdrant_payload_index_create` (que reemplaza
+  sin avisar un índice existente con otro schema) pasan a `destructive_hint=True`.
+- **El hallazgo más peligroso era un hueco, no una frase falsa:** en las tools de payload y de
+  vectores, un id inexistente hace fallar la llamada, **pero los ids existentes de esa misma llamada
+  sí se escriben**. Un modelo que lee el error cree que no pasó nada. Ahora la descripción lo dice.
+- Todo queda fijado en `tests/integration/test_behavior_audit_integration.py`.
+
 ## Versionado
 
 | Versión | Fase cerrada |
@@ -724,6 +744,7 @@ e inserción, opt-in, sin parsear documentos ni decidir chunking).
 | v2.6.0 | 15b — revisión independiente: correcciones |
 | — | 16 — landing técnica, sin versión de paquete |
 | v2.7.0 | 17 — robustez, seguridad y Qdrant 1.20 |
+| v2.7.1 | 17b — auditoría de las descripciones anteriores a la Fase 12 |
 
 ---
 *Catálogo de endpoints verificado contra `api.qdrant.tech/master/llms.txt` y el README de
