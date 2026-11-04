@@ -856,6 +856,29 @@ los prompts funcionan como `/mcp__<servidor>__<prompt> args`, con argumentos pos
   variantes, atribuyó la pérdida de recall (0,95) a la cuantización (no a `hnsw_ef`) y propuso el
   cambio mínimo y reversible con sus números, esperando aprobación.
 
+### Fase 22 — `feat/showcase` (sin bump del paquete)
+Alcance aprobado (2026-11-04): que la web diga la verdad y reproduzca escenarios nuevos, sin rediseño.
+- **Copy corregido** (EN y ES): la web decía que el servidor nunca genera embeddings, que los fallos
+  de transporte se reintentan y que un lote de aliases no es todo o nada; las tres cosas dejaron de
+  ser verdad en las Fases 17–18. El ejemplo del método ahora cuenta lo que pasó de verdad: el test
+  que fijaba el comportamiento de los aliases falló en CI cuando Qdrant 1.20 lo cambió.
+- **Escenarios nuevos grabados** (`scripts/record_scenarios.py`): búsqueda por texto (semántica,
+  entre idiomas, BM25 e híbrida) y el asesor (doctor → fix → doctor limpio → recall 0,975 frente a 1,0
+  con rescore). Deterministas: el de texto graba ids y títulos, no puntuaciones (varían entre CPUs);
+  el del asesor construye HNSW con un solo hilo (en paralelo, el recall variaba entre 0,963 y 0,975
+  sobre los mismos datos). Dos `--check` seguidos, idénticos.
+- **Bitácora**: cuatro entradas nuevas (escrituras parciales, el `.mcpb` que nunca arrancó, el texto
+  truncado, la fix de memoria) y dos corregidas que citaban tests renombrados en la Fase 17. Un test
+  nuevo (`tests/unit/test_site_content.py`) falla si la web cita un test que no existe.
+- **Puerta 2** (Docker, `chrome-devtools`): cero desbordamiento horizontal a 375/768/1024/1440 en los
+  dos idiomas — a 768 la cabecera ya desbordaba 59 px antes de esta fase (la navegación en línea pasa
+  a `lg`); la cadena de calidad, ahora de 7 pasos, se reparte en columnas según su número; el rojo de
+  resaltado del reproductor medía 4,27:1 (el comentario decía que cumplía AA) y pasa a 5,5:1.
+  Lighthouse móvil: accesibilidad 100, buenas prácticas 100, SEO 100. Traza móvil con CPU ×4 y Slow
+  4G: LCP 1,33 s, CLS 0,00 (INP sin medir: requiere interacción). Detector anti-IA: los avisos nuevos
+  son de longitud de línea y viudas en los textos más largos de la bitácora, dentro del diseño
+  aprobado; no se tocaron.
+
 ## Versionado
 
 | Versión | Fase cerrada |
