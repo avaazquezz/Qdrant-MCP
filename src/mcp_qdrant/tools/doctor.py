@@ -346,7 +346,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
         `checked` lists the rules evaluated: always the first four, plus `text_contract` when
         the collection declares one. A report with no findings means none of these rules fired,
-        not that the collection is optimally configured.
+        not that the collection is optimally configured: `qdrant_search_quality_eval` measures
+        how well its search actually performs (recall and latency).
 
         Each finding has a `severity` (error, warning, info), a plain-language `finding`, the
         numbers it is based on (`evidence`) and, when one exists, a `fix`: a call to another
