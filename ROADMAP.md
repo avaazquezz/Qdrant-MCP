@@ -798,6 +798,31 @@ Lo que queda, y lo que de verdad reduce lo que lee el modelo:
 - Para que quepa sin subir presupuestos: fuera los `title` que Pydantic genera en los modelos de
   entrada propios (158 campos): catálogo 180,2 → 175,9 KB, `qdrant_query_batch` 15.030 → 14.230 B.
 
+### Fase 20 — `feat/advisor` → v2.10.0 (toolset `admin`, solo lectura)
+- `qdrant_search_quality_eval` (yo): verdad = búsqueda exacta; recall@k por variante y latencia
+  p50/p95 (percentil por rango más cercano: siempre un valor observado). **El propio punto se
+  excluye pidiendo `limit + 1` y descartándolo, no con `must_not has_id`**: un filtro llevaría a
+  Qdrant por su ruta de búsqueda filtrada y mediría esa en vez de la del usuario. Recall `null`
+  cuando no hay nada más que encontrar (no un 1.0 inventado).
+- `qdrant_collection_doctor` (`implementer`, en worktree, con reglas verificadas antes por mí;
+  revisado y ajustado al integrar): `status`, `unindexed`, `memory`, `aliases`, `text_contract`,
+  cada hallazgo con la llamada exacta que lo corrige; los tests de integración ejecutan cada fix con
+  las tools reales.
+
+**Hallazgos verificados durante la Fase 20** (en vivo, `v1.20.0`):
+- `indexed_vectors_count` suma vectores densos **y sparse** (5000 puntos con uno de cada → 10000):
+  la regla `unindexed` no puede dispararse en colecciones con sparse (anotado en el código).
+- La API de *issues* de Qdrant no reportó nada ni con 30 búsquedas filtradas por un campo sin índice
+  sobre HNSW construido (igual que en la auditoría 17b): no se usa.
+- `GET /collections/<alias>/aliases` responde `[]` aunque `get_collection(<alias>)` sí resuelve el
+  alias: el doctor lee `get_aliases()` (lo cazó el `implementer`).
+- **Cuantizar no ahorra RAM por sí solo**: la copia int8 se añade junto a los originales (Qdrant,
+  *capacity planning*). La fix de `memory` pone la copia `pinned` y los originales en `cold`; ambas
+  partes verificadas con `qdrant_collection_update`, también para el vector sin nombre (`""`).
+- Sobre una colección con cuantización escalar, sin *rescore*: recall 0,963–0,97; ignorando la
+  cuantización o con `rescore` + `oversampling` 2.0: 1,0. `hnsw_ef` no cambiaba nada ahí: la
+  pérdida venía de la cuantización, no del grafo.
+
 ## Versionado
 
 | Versión | Fase cerrada |
@@ -823,6 +848,7 @@ Lo que queda, y lo que de verdad reduce lo que lee el modelo:
 | v2.7.1 | 17b — auditoría de las descripciones anteriores a la Fase 12 |
 | v2.8.0 | 18 — búsqueda por texto (semántica, BM25, híbrida) |
 | v2.9.0 | 19 — menos contexto: selección de claves del payload |
+| v2.10.0 | 20 — asesor: doctor y evaluación de calidad de búsqueda |
 
 ---
 *Catálogo de endpoints verificado contra `api.qdrant.tech/master/llms.txt` y el README de

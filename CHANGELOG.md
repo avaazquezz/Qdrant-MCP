@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-11-04
+
+A search advisor, in the `admin` toolset: Qdrant expertise the model no longer has to carry.
+
+### Added
+- **`qdrant_collection_doctor`** checks one collection (or alias) and answers each finding with
+  the exact call to another tool that acts on it: a non-green status (yellow, grey — optimizations
+  paused after a restart — or red, with the optimizer's error), no vector index yet (every search
+  scans all points), 1 GiB or more of dense vectors held in RAM unquantized (the fix pins an int8
+  copy in RAM and moves the originals to the cold tier — quantization alone only adds the copy),
+  no alias pointing at it (a rebuild-and-switch would need a client change), and a broken text
+  setup. Read-only: it never applies a fix.
+- **`qdrant_search_quality_eval`** measures recall@k of the approximate search against an exact
+  one, plus latency p50/p95, for up to five `search_params` variants, using points the collection
+  already holds as queries. The query point is left out without a filter, which would switch
+  Qdrant to its filtered-search path. Example on a scalar-quantized collection: recall 0.97 by
+  default, 1.0 with rescoring.
+
 ## [2.9.0] - 2026-11-04
 
 Less context per call. Measured first in a real Claude Code session (2.1.318) against a probe
