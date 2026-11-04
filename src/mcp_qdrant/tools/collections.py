@@ -13,9 +13,17 @@ from qdrant_client.http.models import (
     CollectionsResponse,
     Disabled,
     Distance,
+    Language,
+    Snowball,
+    SnowballLanguage,
+    SnowballParams,
+    TextIndexParams,
+    TextIndexType,
+    TokenizerType,
     VectorParams,
 )
 
+from mcp_qdrant import embeddings
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.registry import ToolRegistry
 from mcp_qdrant.tools.schemas import (
@@ -28,6 +36,45 @@ from mcp_qdrant.tools.schemas import (
     VectorParamsDiffMapInput,
     VectorParamsMapInput,
 )
+from mcp_qdrant.tools.text_shared import (
+    DEFAULT_TEXT_FIELD,
+    METADATA_KEY,
+    TextContract,
+    contract_from_metadata,
+    new_contract,
+)
+
+# The named vector `text_model` creates.
+TEXT_VECTOR = "dense"
+_STOPWORDS = {language.value for language in Language}
+
+
+def _bm25_index(language: SnowballLanguage) -> TextIndexParams:
+    """A text index ranked by BM25 (Qdrant 1.20 `scoring`), tokenized for one language: words
+    reduced to their stem, accents folded, stopwords dropped — verified that `viviendas` then
+    matches `vivienda` and `jovenes` matches `jóvenes`."""
+    return TextIndexParams(
+        type=TextIndexType.TEXT,
+        tokenizer=TokenizerType.MULTILINGUAL,
+        lowercase=True,
+        ascii_folding=True,
+        stemmer=SnowballParams(type=Snowball.SNOWBALL, language=language),
+        stopwords=Language(language.value) if language.value in _STOPWORDS else None,
+        scoring=True,
+    )
+
+
+def _dense_size(info: CollectionInfo, vector_name: str) -> int | None:
+    """Size of a single-vector dense vector ("" = the unnamed one); None if there's no such
+    vector, or it's a multivector (a text model makes one vector per text)."""
+    vectors = info.config.params.vectors
+    params = vectors if isinstance(vectors, VectorParams) and vector_name == "" else None
+    if isinstance(vectors, dict):
+        params = vectors.get(vector_name)
+    if params is None or params.multivector_config is not None:
+        return None
+    return params.size
+
 
 _CREATE_ANNOTATIONS = ToolAnnotations(
     title="Create Qdrant collection",
@@ -98,13 +145,29 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         hnsw_config: HnswConfigDiffInput | None = None,
         optimizers_config: OptimizersConfigDiffInput | None = None,
         on_disk_payload: bool | None = None,
+        text_model: str | None = None,
+        text_language: SnowballLanguage | None = None,
+        text_field: str | None = None,
     ) -> CollectionInfo:
-        """Create a collection: either a single unnamed vector (`vector_size`
-        + `distance`), or one or more named vectors (`vectors`, each a full
+        """Create a collection: a single unnamed vector (`vector_size` +
+        `distance`), one or more named vectors (`vectors`, each a full
         `VectorParams` — size, distance, and optionally its own
         `multivector_config` for ColBERT-style multi-vectors or
-        `quantization_config`) — exactly one of the two. `sparse_vectors`
-        defines sparse (keyword-style) vectors at creation time.
+        `quantization_config`), or a text collection (`text_model`) — exactly
+        one of the three. `sparse_vectors` defines sparse (keyword-style)
+        vectors at creation time.
+
+        Text: `text_model` (a fastembed model, e.g.
+        `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, 384 dims,
+        multilingual, downloaded on first use) creates a `dense` Cosine vector
+        of the model's size and records the model in the collection's metadata,
+        so `text` in `qdrant_points_upsert` and `query_text` in `qdrant_query`
+        embed with it. `text_language` (e.g. "spanish") adds a BM25 index on
+        `text_field` (default `text`) for `bm25_query`: stemmed, accent-folded,
+        stopwords removed where Qdrant has a list for the language (all but
+        armenian and tamil); given alone, it makes a keyword-only collection
+        with no vectors. The embedded local mode (QDRANT_LOCAL_PATH) can't rank
+        such an index — BM25 there needs the default tokenization.
         `quantization_config` (scalar/product/binary) and
         `strict_mode_config` apply to the whole collection.
 
@@ -122,15 +185,42 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Example (multitenant index, payload on disk): {"collection_name": "docs",
             "vector_size": 4, "hnsw_config": {"m": 0, "payload_m": 16},
             "on_disk_payload": true}
+        Example (text, semantic + BM25): {"collection_name": "notes", "text_model":
+            "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+            "text_language": "spanish"}
         """
-        if (vector_size is None) == (vectors is None):
-            raise ToolError("Provide exactly one of `vector_size` or `vectors`, not both/neither.")
-        vectors_config = (
-            VectorParams(size=vector_size, distance=Distance(distance))
-            if vector_size is not None
-            else vectors
-        )
-        assert vectors_config is not None
+        chosen = sum(v is not None for v in (vector_size, vectors, text_model))
+        if chosen > 1 or (chosen == 0 and text_language is None):
+            raise ToolError(
+                "Provide exactly one of `vector_size`, `vectors` or `text_model` (or only "
+                "`text_language`, for a keyword-only collection)."
+            )
+        is_text = text_model is not None or text_language is not None
+        if text_field is not None and not is_text:
+            raise ToolError("`text_field` only applies with `text_model` or `text_language`.")
+        if text_model is not None and distance != "Cosine":
+            raise ToolError("A `text_model` collection always uses Cosine; drop `distance`.")
+        field = text_field or DEFAULT_TEXT_FIELD
+        vectors_config: VectorParams | dict[str, VectorParams] = {}
+        if vector_size is not None:
+            vectors_config = VectorParams(size=vector_size, distance=Distance(distance))
+        elif vectors is not None:
+            vectors_config = vectors
+        models: dict[str, str] = {}
+        if text_model is not None:
+            model, size = embeddings.model_info(text_model)
+            vectors_config = {TEXT_VECTOR: VectorParams(size=size, distance=Distance.COSINE)}
+            models = {TEXT_VECTOR: model}
+        if is_text:
+            if metadata and METADATA_KEY in metadata:
+                raise ToolError(
+                    f"`metadata.{METADATA_KEY}` is written by `text_model`/`text_language`; "
+                    "don't set it yourself."
+                )
+            contract = new_contract(field, models)
+            metadata = {**(metadata or {}), METADATA_KEY: contract.model_dump()}
+        else:
+            contract_from_metadata(metadata, collection_name)  # a hand-written one must parse
         await call_qdrant(
             lambda: client.create_collection(
                 collection_name,
@@ -144,6 +234,21 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 on_disk_payload=on_disk_payload,
             )
         )
+        if text_language is not None:
+            try:
+                await call_qdrant(
+                    lambda: client.create_payload_index(
+                        collection_name,
+                        field_name=field,
+                        field_schema=_bm25_index(text_language),
+                        wait=True,
+                    )
+                )
+            except ToolError as exc:
+                raise ToolError(
+                    f"Collection {collection_name!r} was created, but its BM25 index on "
+                    f"{field!r} failed: {exc}. Create it with `qdrant_payload_index_create`."
+                ) from exc
         return await call_qdrant(lambda: client.get_collection(collection_name))
 
     async def qdrant_collection_list() -> CollectionsResponse:
@@ -171,9 +276,21 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         quantization_config: QuantizationConfigInput | Literal["disabled"] | None = None,
         sparse_vectors_config: SparseVectorParamsMapInput | None = None,
         strict_mode_config: StrictModeConfigInput | None = None,
+        text_models: dict[str, str | None] | None = None,
+        text_field: str | None = None,
     ) -> CollectionInfo:
         """Update optimizer/HNSW/collection/vector params on an existing
         collection.
+
+        `text_models` declares which fastembed model made each existing dense
+        vector (`{"<vector name>": "<model>"}`, `""` for the unnamed vector), so
+        `query_text` and `text` upserts work on a collection built elsewhere —
+        it must be the model the stored vectors were made with, and its size
+        must match the vector's. `null` removes a declaration (e.g. after
+        deleting that vector). A collection with points won't switch a vector
+        to a different model: remove the declaration first if it was wrong.
+        `text_field` names the payload field holding the text (default `text`).
+        Both are kept in the collection's metadata.
 
         Only the fields you pass are changed; omitted ones keep their current
         value. `quantization_config="disabled"` turns quantization off.
@@ -188,6 +305,42 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         resolved_quantization = (
             Disabled.DISABLED if quantization_config == "disabled" else quantization_config
         )
+        metadata = None
+        if text_models is not None or text_field is not None:
+            info = await call_qdrant(lambda: client.get_collection(collection_name))
+            contract = contract_from_metadata(info.config.metadata, collection_name)
+            contract = contract or TextContract()
+            models = dict(contract.models)
+            for vector_name, requested in (text_models or {}).items():
+                if requested is None:
+                    models.pop(vector_name, None)
+                    continue
+                model, size = embeddings.model_info(requested)
+                actual = _dense_size(info, vector_name)
+                if actual is None:
+                    raise ToolError(
+                        f"{collection_name!r} has no single dense vector named {vector_name!r} "
+                        '("" is the unnamed vector).'
+                    )
+                if actual != size:
+                    raise ToolError(
+                        f"{model} makes {size}-dimensional vectors, but {vector_name!r} holds "
+                        f"{actual}-dimensional ones: it can't be the model they were made with."
+                    )
+                declared = models.get(vector_name)
+                if declared not in (None, model) and info.points_count:
+                    # Same size isn't the same model: queries would come back plausible-looking
+                    # and wrong, with no error.
+                    raise ToolError(
+                        f"{vector_name!r} is declared as {declared} and the collection has points "
+                        f"made with it; {model} would give wrong results. If the declaration "
+                        f'is wrong, remove it first with `text_models: {{"{vector_name}": null}}`.'
+                    )
+                models[vector_name] = model
+            new = new_contract(text_field or contract.text_field, models)
+            # Qdrant merges metadata only at the top level (verified), so the whole key is
+            # rewritten.
+            metadata = {METADATA_KEY: new.model_dump()}
         await call_qdrant(
             lambda: client.update_collection(
                 collection_name,
@@ -198,6 +351,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 quantization_config=resolved_quantization,
                 sparse_vectors_config=sparse_vectors_config,
                 strict_mode_config=strict_mode_config,
+                metadata=metadata,
             )
         )
         return await call_qdrant(lambda: client.get_collection(collection_name))

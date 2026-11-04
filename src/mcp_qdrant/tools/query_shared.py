@@ -28,6 +28,8 @@ from qdrant_client.http.models import (
     Sample,
     SampleQuery,
     SparseVector,
+    TextQuery,
+    TextQueryInput,
 )
 
 from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput, StrictInput
@@ -91,12 +93,16 @@ class FormulaInput(StrictInput):
 
 class PrefetchInput(StrictInput):
     """One prefetch stage: an independent query narrowing candidates before
-    the outer query reranks or fuses them. A stage is either a vector query
-    (`query_vector`) or a fusion of its own nested `prefetch` stages
-    (`fusion`) — exactly one — which makes multi-stage pipelines possible,
-    e.g. fuse dense+sparse, then rerank with a multivector."""
+    the outer query reranks or fuses them. A stage is exactly one of a vector
+    query (`query_vector`), a text query embedded with the collection's
+    declared model (`query_text`), a BM25 query over a text-indexed payload
+    field (`bm25_query`), or a fusion of its own nested `prefetch` stages
+    (`fusion`) — which makes multi-stage pipelines possible, e.g. fuse
+    semantic + BM25, then rerank with a multivector."""
 
     query_vector: VectorOrId | None = None
+    query_text: str | None = None
+    bm25_query: str | None = None
     fusion: FusionInput | None = None
     prefetch: list[PrefetchInput] | None = None
     using: str | None = None
@@ -143,19 +149,22 @@ def build_query_value(
     formula: FormulaInput | None = None,
     order_by: OrderBy | str | None = None,
     sample: Literal["random"] | None = None,
+    bm25_query: str | None = None,
 ) -> VectorOrId | Query:
-    """Exactly one of `query_vector` (a literal vector or point id), `fusion`
-    (combine the prefetch stages), `formula` (rescore the prefetch results),
-    `order_by` (sort by a payload field) or `sample` (random points) must be
-    given. `mmr` modifies a `query_vector` query and is invalid without one."""
-    modes = (query_vector, fusion, formula, order_by, sample)
+    """Exactly one of `query_vector` (a literal vector or point id, or an
+    embedded `query_text` — see `text_shared.TextResolver`), `bm25_query`
+    (BM25 over the text index of the field in `using`), `fusion` (combine the
+    prefetch stages), `formula` (rescore the prefetch results), `order_by`
+    (sort by a payload field) or `sample` (random points) must be given.
+    `mmr` modifies a vector query and is invalid without one."""
+    modes = (query_vector, bm25_query, fusion, formula, order_by, sample)
     if sum(mode is not None for mode in modes) != 1:
         raise ToolError(
-            "Provide exactly one of `query_vector`, `fusion`, `formula`, `order_by` or "
-            "`sample`, not several/none."
+            "Provide exactly one of `query_vector`, `query_text`, `bm25_query`, `fusion`, "
+            "`formula`, `order_by` or `sample`, not several/none."
         )
     if mmr is not None and query_vector is None:
-        raise ToolError("`mmr` only applies to a `query_vector` query.")
+        raise ToolError("`mmr` only applies to a `query_vector`/`query_text` query.")
     if query_vector is not None:
         if mmr is not None:
             return NearestQuery(
@@ -163,6 +172,8 @@ def build_query_value(
                 mmr=Mmr(diversity=mmr.diversity, candidates_limit=mmr.candidates_limit),
             )
         return query_vector
+    if bm25_query is not None:
+        return TextQuery(text=TextQueryInput(query=bm25_query))
     if fusion is not None:
         return _build_fusion(fusion)
     if formula is not None:
@@ -175,16 +186,17 @@ def build_query_value(
 def build_prefetch_list(prefetch: list[PrefetchInput] | None) -> list[Prefetch] | None:
     if prefetch is None:
         return None
+    # `query_text` was already turned into `query_vector` (TextResolver.resolve_prefetch).
     for stage in prefetch:
-        if (stage.query_vector is None) == (stage.fusion is None):
+        if sum(m is not None for m in (stage.query_vector, stage.bm25_query, stage.fusion)) != 1:
             raise ToolError(
-                "A prefetch stage needs exactly one of `query_vector` or `fusion` (a fusion of "
-                "its own nested `prefetch` stages), not both/neither."
+                "A prefetch stage needs exactly one of `query_vector`, `query_text`, "
+                "`bm25_query` or `fusion` (a fusion of its own nested `prefetch` stages)."
             )
     return [
         Prefetch(
             prefetch=build_prefetch_list(p.prefetch),
-            query=build_query_value(p.query_vector, p.fusion),
+            query=build_query_value(p.query_vector, p.fusion, bm25_query=p.bm25_query),
             using=p.using,
             filter=p.query_filter,
             params=p.search_params,

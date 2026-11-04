@@ -13,11 +13,13 @@ imagen; **no opera ninguna instancia pública** ni aloja datos de terceros.
 
 ## Principios (no negociables)
 
-1. **Wrapper puro sobre Qdrant, no un RAG.** El servidor nunca genera embeddings, nunca
-   parsea documentos, nunca decide chunking. Recibe y devuelve vectores/payloads tal
-   cual. Esto es lo que lo diferencia a propósito del proyecto anterior
-   (`QdrantMCP_RAG-Build`) — de ahí no se porta código, solo sirve como referencia de
-   qué NO volver a mezclar en este repo.
+1. **Wrapper sobre Qdrant, no un RAG.** El servidor nunca parsea documentos ni decide
+   chunking. Puede convertir **un texto en un vector** cuando la colección declara su modelo
+   (fastembed local, extra opcional `embeddings`) y hacer BM25 con el índice de texto de
+   Qdrant; todo lo demás lo recibe y devuelve tal cual. *Reformulado el 2026-11-04 (Fase 18):
+   hasta entonces decía "nunca genera embeddings", y por eso Claude no podía buscar por
+   significado con una pregunta en texto.* Sigue sin portarse nada del proyecto anterior
+   (`QdrantMCP_RAG-Build`): ingesta de ficheros y chunking siguen fuera.
 2. **Cada feature vive en su rama**, se cierra con PR + CI en verde, y no se abre la
    siguiente fase hasta cerrar la anterior.
 3. **Cobertura antes que atajos.** El catálogo de tools de este roadmap está sacado del
@@ -722,6 +724,61 @@ descripciones no:
   sí se escriben**. Un modelo que lee el error cree que no pasó nada. Ahora la descripción lo dice.
 - Todo queda fijado en `tests/integration/test_behavior_audit_integration.py`.
 
+### Fase 18 — `feat/text-search` → v2.8.0
+Texto en vez de vectores, sin tools nuevas (precedente de la Fase 14): `qdrant_query` (+ `_batch`,
+`_groups` y cada etapa de `prefetch`) gana `query_text` (semántica) y `bm25_query` (palabras clave);
+`qdrant_points_upsert` acepta `text`; `qdrant_collection_create` gana `text_model`/`text_language` y
+`qdrant_collection_update`, `text_models`.
+
+- **Contrato en los metadatos de la colección**: `{"mcp_qdrant": {"text_field", "models": {vector:
+  modelo}}}`. El servidor nunca adivina el modelo; al declararlo comprueba que su dimensión casa con
+  la del vector.
+- **BM25 por índice de texto (`TextQuery`, Qdrant 1.20), no por vectores sparse** (decidido con
+  Adri el 2026-11-04 tras las sondas): funciona en colecciones existentes sin reingerir, y el
+  idioma vive en el índice, así que indexado y consulta no pueden desincronizarse.
+- **Embebido propio** (`embeddings.py`): fastembed importado de forma perezosa, inferencia en un
+  hilo (`asyncio.to_thread`) con un lock, errores propios (falta el extra, modelo desconocido,
+  descarga fallida). Descartado pasar `Document` a `qdrant-client`: embebe dentro del coroutine
+  (bloquea el event loop, la primera vez durante la descarga del modelo).
+- Extra `mcp-qdrant[embeddings]` = `qdrant-client[fastembed]` (hereda su pin). La imagen Docker y el
+  `.mcpb` lo incluyen; los modelos se cachean en `FASTEMBED_CACHE_PATH` (`/models` en Docker).
+
+**Hallazgos verificados durante la Fase 18** (en vivo, `v1.20.0`):
+- Un `TextQuery` sin stemmer no casa plural con singular ("viviendas" ≠ "vivienda"); con stemmer
+  Snowball, stopwords y `ascii_folding`, sí ("jovenes" encuentra "jóvenes"). Por eso `text_language`
+  crea el índice con los tres.
+- BM25 por `Document` (`Qdrant/bm25`) sin `language` asume inglés y devolvió **0 resultados** para
+  una consulta en español; con `language: spanish` funcionó. Es el fallo silencioso que evita el
+  índice de texto.
+- Los metadatos de colección se fusionan **solo en el primer nivel**: actualizar `mcp_qdrant`
+  reemplaza la clave entera. `qdrant_collection_update` la lee, la modifica y la reescribe completa.
+- `get_collection` por alias devuelve los metadatos de la colección real: un reindex con copy + alias
+  conserva las consultas por texto (fijado en un test de integración).
+- La descarga de un modelo no escribe nada en stdout (progreso y avisos van a stderr): el transporte
+  stdio no se corrompe.
+- **El `.mcpb` no arrancaba desde la v1.0.0.** Ejecutaba `src/mcp_qdrant/cli.py` como script, lo que
+  pone `src/mcp_qdrant/` primero en `sys.path`: el módulo propio `qdrant_client.py` tapaba al paquete
+  real y el servidor moría al importar. Solo se validaba el schema del manifest. Ahora lanza el
+  console script `mcp-qdrant`, y un test de integración arranca el servidor con los argumentos exactos
+  del manifest y le habla con un cliente MCP real.
+
+**18b — revisión independiente antes del tag** (mismo método que la 15b y la 17b; cada hallazgo
+reproducido por mí). 14 defectos, ninguno alto; los que más importaban eran silenciosos:
+- `text` en una colección con vectores pero sin modelo declarado guardaba el punto **sin vector**.
+- Un texto más largo que lo que lee el modelo (128 tokens) se **truncaba**: verificado que dos textos
+  que solo difieren pasado el límite dan vectores idénticos. Ahora se rechaza.
+- fastembed **no añade los prefijos** de consulta/documento (e5, nomic, snowflake...): el comentario
+  que decía lo contrario era falso. Esos modelos se excluyen.
+- Redeclarar otro modelo de la misma dimensión en una colección con puntos se aceptaba; ahora exige
+  quitar antes la declaración (`null`).
+- Un `text_field` con punto se escribía como clave literal y el índice lo leía como ruta anidada:
+  BM25 no lo encontraba nunca.
+- El lock global se mantenía durante la descarga de un modelo; ahora hay uno por modelo.
+- Además: texto vacío, tope de textos por upsert, conflicto `text` / `payload.<campo>`, valores que se
+  ignoraban en silencio (`text_field` sin opciones de texto, `distance` con `text_model`), metadatos
+  mal formados aceptados en `create`, y `query_text` anunciado pero rechazado en el prefetch de
+  recommend/discover (ahora se resuelve).
+
 ## Versionado
 
 | Versión | Fase cerrada |
@@ -745,6 +802,7 @@ descripciones no:
 | — | 16 — landing técnica, sin versión de paquete |
 | v2.7.0 | 17 — robustez, seguridad y Qdrant 1.20 |
 | v2.7.1 | 17b — auditoría de las descripciones anteriores a la Fase 12 |
+| v2.8.0 | 18 — búsqueda por texto (semántica, BM25, híbrida) |
 
 ---
 *Catálogo de endpoints verificado contra `api.qdrant.tech/master/llms.txt` y el README de

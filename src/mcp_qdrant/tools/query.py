@@ -27,6 +27,7 @@ from mcp_qdrant.tools.query_shared import (
 )
 from mcp_qdrant.tools.registry import ToolRegistry
 from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput
+from mcp_qdrant.tools.text_shared import TextResolver
 
 _QUERY_ANNOTATIONS = ToolAnnotations(
     title="Query Qdrant",
@@ -41,6 +42,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_query(
         collection_name: str,
         query_vector: VectorOrId | None = None,
+        query_text: str | None = None,
+        bm25_query: str | None = None,
         fusion: FusionInput | None = None,
         prefetch: list[PrefetchInput] | None = None,
         mmr: MmrInput | None = None,
@@ -75,6 +78,14 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
           which leaves MMR nothing to choose from). `offset` pages through the
           MMR ranking on Qdrant 1.20 (verified; older servers applied it inside
           the `limit` re-ranked results, so raise `limit` there instead).
+        - `query_text` — semantic search with plain text: embedded with the model
+          the collection declares for the vector in `using` (`using` can be
+          omitted when it declares exactly one). Needs the `embeddings` extra;
+          `mmr` works as with `query_vector`.
+        - `bm25_query` — keyword search ranked by BM25 (Qdrant 1.20): `using` is
+          a payload field whose `text` index has `scoring` set (defaults to the
+          collection's declared text field). The index's own tokenizer, stemmer
+          and stopwords apply. Needs no embeddings.
         - `fusion` + 2+ `prefetch` stages — combine retrieval strategies:
           `"rrf"` (Reciprocal Rank Fusion), `"dbsf"` (Distribution-Based Score
           Fusion), or `{"method": "rrf", "weights": [2, 1], "k": 60}` for RRF
@@ -100,9 +111,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
           The key needs a payload range index (integer, float or datetime).
         - `sample: "random"` — random points.
 
-        A `prefetch` stage is itself a `query_vector` query or a `fusion` of
-        its own nested `prefetch` stages, so pipelines nest: fuse dense+sparse
-        in one stage, then rerank with a multivector. `using` selects a named
+        A `prefetch` stage is itself a `query_vector`, `query_text` or
+        `bm25_query` query, or a `fusion` of its own nested `prefetch` stages,
+        so pipelines nest: fuse semantic + BM25 in one stage, then rerank. `using` selects a named
         vector; `lookup_from` resolves `query_vector` from a point id in
         another collection.
 
@@ -117,6 +128,11 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
         Example (plain): {"collection_name": "docs", "query_vector": [0.1, 0.2, 0.3, 0.4],
             "limit": 5}
+        Example (by text): {"collection_name": "docs", "query_text": "housing grants", "limit": 5}
+        Example (semantic + BM25): {"collection_name": "docs", "fusion": "rrf", "prefetch": [
+            {"query_text": "housing grants", "limit": 20},
+            {"bm25_query": "housing grants", "limit": 20}
+        ], "limit": 5}
         Example (hybrid): {"collection_name": "docs", "fusion": "rrf", "prefetch": [
             {"query_vector": [0.1, 0.2, 0.3, 0.4], "using": "dense", "limit": 20},
             {"query_vector": {"indices": [1, 7], "values": [0.5, 0.2]}, "using": "sparse",
@@ -132,8 +148,17 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             "direction": "asc"}, "limit": 5}
         """
         registry.check_limit(limit)
+        text = TextResolver(client, collection_name)
+        query_vector, using = await text.resolve(query_vector, query_text, bm25_query, using)
+        prefetch = await text.resolve_prefetch(prefetch)
         query = build_query_value(
-            query_vector, fusion, mmr=mmr, formula=formula, order_by=order_by, sample=sample
+            query_vector,
+            fusion,
+            mmr=mmr,
+            formula=formula,
+            order_by=order_by,
+            sample=sample,
+            bm25_query=bm25_query,
         )
         return await call_qdrant(
             lambda: client.query_points(

@@ -31,7 +31,7 @@ jobs:
           version: "0.12.5"
           python-version: "3.12"
           enable-cache: true
-      - run: uv sync --dev
+      - run: uv sync --dev --extra embeddings
       - run: uv run mypy
 
   test:
@@ -43,6 +43,7 @@ jobs:
           - 6333:6333
     env:
       QDRANT_URL: "http://localhost:6333"
+      FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
@@ -50,7 +51,12 @@ jobs:
           version: "0.12.5"
           python-version: "3.12"
           enable-cache: true
-      - run: uv sync --dev
+      - run: uv sync --dev --extra embeddings
+      # The text-search tests embed with a real model; download it once, not on every run.
+      - uses: actions/cache@v6
+        with:
+          path: /home/runner/.cache/fastembed
+          key: fastembed-paraphrase-multilingual-MiniLM-L12-v2
       - name: Wait for Qdrant to be ready
         run: |
           for i in $(seq 1 30); do

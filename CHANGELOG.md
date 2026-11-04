@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-11-04
+
+Text search: a model can now search a collection with a plain-text question and store plain text,
+instead of having to bring vectors it can't compute. Documents are still never parsed or chunked:
+one text is one point.
+
+### Added
+- `qdrant_query`, `qdrant_query_batch`, `qdrant_query_groups` and every `prefetch` stage take two
+  new modes: **`query_text`** (semantic search, embedded locally with the model the collection
+  declares) and **`bm25_query`** (keyword search ranked by BM25 over a text-indexed payload field,
+  Qdrant 1.20). Fused in one query they give hybrid search.
+- `qdrant_points_upsert` accepts **`text`** instead of `vector`: it is embedded with every model the
+  collection declares and stored in its text field.
+- `qdrant_collection_create` takes **`text_model`** (a `dense` vector sized for the model) and
+  **`text_language`** (a BM25 index with that language's stemmer, stopwords and accent folding);
+  `qdrant_collection_update` takes **`text_models`** to declare the model of an existing
+  collection's vectors, checking its size. The choice is stored in the collection's metadata, so the
+  same model is always used.
+- Optional extra **`mcp-qdrant[embeddings]`** (fastembed). The Docker image and the `.mcpb` bundle
+  include it; models are downloaded on first use into `FASTEMBED_CACHE_PATH` (`/models` in Docker).
+
+An independent review of the feature before release (Fase 18b) found 14 defects, all reproduced
+and fixed here. The text path now refuses what it used to get silently wrong: a text longer than
+the model reads (it was cut, two texts differing past the limit got identical vectors), `text`
+into a collection whose vectors have no declared model (the point was stored without a vector),
+models that need query/document prefixes fastembed doesn't add, switching a populated collection
+to a different model of the same size, a dotted `text_field` (BM25 could never find the text), and
+empty text. Recommend and discover prefetch stages now resolve `query_text`/`bm25_query` too, each
+model has its own lock (one slow download no longer blocks every other text call), and upserts
+count their `text` points against `QDRANT_MCP_MAX_LIMIT`.
+
+### Fixed
+- **The `.mcpb` bundle never started** (since v1.0.0): it ran `src/mcp_qdrant/cli.py` as a script,
+  which let this package's `qdrant_client.py` shadow the real `qdrant_client`. It now runs the
+  `mcp-qdrant` console script, and a test launches the server with the manifest's exact command.
+
 ## [2.7.1] - 2026-11-04
 
 An independent reviewer audited every behavioral claim in the tool descriptions written before

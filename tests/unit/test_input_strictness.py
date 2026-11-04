@@ -138,6 +138,9 @@ async def test_a_prefetch_stage_error_says_what_a_stage_needs_not_the_top_level_
         )
 
     message = str(excinfo.value)
-    assert "prefetch stage needs exactly one of `query_vector` or `fusion`" in message
+    assert (
+        "prefetch stage needs exactly one of `query_vector`, `query_text`, `bm25_query` or "
+        "`fusion`" in message
+    )
     assert "order_by" not in message and "sample" not in message  # modes a stage can't use
     mock.query_points.assert_not_awaited()

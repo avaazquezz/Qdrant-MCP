@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "mcp-qdrant",
   "display_name": "Qdrant MCP",
-  "version": "2.7.1",
+  "version": "2.8.0",
   "description": "MCP server that wraps the Qdrant vector database API as tools.",
   "author": {
     "name": "Adrián"
@@ -17,7 +17,7 @@
     "entry_point": "src/mcp_qdrant/cli.py",
     "mcp_config": {
       "command": "uv",
-      "args": ["run", "--directory", "${__dirname}", "src/mcp_qdrant/cli.py"],
+      "args": ["run", "--directory", "${__dirname}", "--extra", "embeddings", "mcp-qdrant"],
       "env": {
         "QDRANT_URL": "${user_config.qdrant_url}",
         "QDRANT_API_KEY": "${user_config.qdrant_api_key}",

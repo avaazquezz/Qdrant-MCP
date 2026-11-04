@@ -26,6 +26,7 @@ vector editing, snapshots, and server observability. Not just `store`/`find`.
 - [Connecting to Claude](#connecting-to-claude)
   - [Claude Desktop / Claude Code (local, stdio)](#claude-desktop--claude-code-local-stdio)
   - [Remote (streamable-http)](#remote-streamable-http)
+- [Text Search](#text-search)
 - [Configuration Reference](#configuration-reference)
 - [Available Tools](#available-tools)
 - [Read-Only Mode](#read-only-mode)
@@ -39,22 +40,27 @@ vector editing, snapshots, and server observability. Not just `store`/`find`.
 
 Qdrant MCP is a thin [MCP](https://modelcontextprotocol.io) server that wraps the Qdrant API
 one-to-one: it registers a tool per Qdrant operation, validates the input with Pydantic, calls
-the official `qdrant-client` SDK, and returns the result. It never generates embeddings, never
-parses documents, and never decides how to chunk text — **it is not a RAG system**, on purpose.
-Whatever an LLM client wants to store or query, it brings its own vectors.
+the official `qdrant-client` SDK, and returns the result. It never parses documents and never
+decides how to chunk text — **it is not a RAG pipeline**, on purpose. A client can bring its own
+vectors, or — with the optional `embeddings` extra — send plain text and search by meaning or
+by keywords (see [Text Search](#text-search)).
 
-That focus is also what sets it apart from the [official Qdrant MCP
+That is what sets it apart from the [official Qdrant MCP
 server](https://github.com/qdrant/mcp-server-qdrant), which exposes exactly two tools
-(`store`/`find`) and does embed documents for you. This server covers the rest of Qdrant's
-surface — everything under collections, points, search, payload, indexing, snapshots, and
-observability — so an LLM client can manage a Qdrant deployment end to end, not just push and
-pull memories through a narrow interface.
+(`store`/`find`). This server covers the rest of Qdrant's surface — everything under
+collections, points, search, payload, indexing, snapshots, and observability — so an LLM client
+can manage a Qdrant deployment end to end, and query it in plain text too.
 
 See [ROADMAP.md](ROADMAP.md) for the full phase-by-phase design history, including every
 finding that shaped a decision (in Spanish).
 
 ## Key Features
 
+- **Text search** — semantic search with plain text (`query_text`, embedded locally with
+  fastembed using the model the collection declares), BM25 keyword search with stemming and
+  stopwords (`bm25_query`, Qdrant 1.20, no embeddings needed), and both fused in one hybrid
+  query. Upserts accept `text` too. Works on collections built elsewhere once their model is
+  declared.
 - **Full collection & point lifecycle** — create/update/delete collections, CRUD on points,
   scrolling, counting.
 - **Every Qdrant search mode** — plain vector search over dense, sparse and multivectors,
@@ -89,7 +95,8 @@ finding that shaped a decision (in Spanish).
   (`qdrant_collection_vector_create`/`qdrant_collection_vector_delete`) depend on an endpoint
   that returns `404` on older Qdrant servers (verified against v1.13.6 and v1.15.1) — everything
   else works on older versions. Tool descriptions state the behavior verified on v1.20.0, and say
-  so where v1.19 differed (alias batches, MMR with `offset`).
+  so where v1.19 differed (alias batches, MMR with `offset`). [Text search](#text-search) needs
+  v1.16+ (it keeps the model in the collection's metadata), and its BM25 mode v1.20+.
 
 ## Installation
 
@@ -101,6 +108,9 @@ uvx mcp-qdrant
 
 # Or install into your environment
 pip install mcp-qdrant
+
+# With text search (adds fastembed; models are downloaded on first use)
+uvx --from 'mcp-qdrant[embeddings]' mcp-qdrant
 ```
 
 ### Docker
@@ -111,6 +121,7 @@ docker run --rm -p 8000:8000 \
   -e QDRANT_MCP_TRANSPORT=streamable-http \
   -e QDRANT_MCP_HTTP_HOST=0.0.0.0 \
   -e QDRANT_MCP_SHARED_SECRET=<a long random secret> \
+  -v mcp-qdrant-models:/models \
   ghcr.io/avaazquezz/qdrant-mcp:latest
 ```
 
@@ -193,6 +204,42 @@ real account): enter the server's HTTPS URL, then on the detected authentication
 (`Authorization` is used here because it's one of the two header names Claude.ai's
 custom-connector UI accepts without requiring Anthropic's manual approval of a custom name.)
 
+## Text Search
+
+Text search needs no extra configuration — the collection carries it. Its metadata records which
+model made each dense vector and which payload field holds the text, so every later query and
+upsert uses the same model (a query embedded with a different model would return
+plausible-looking nonsense with no error):
+
+```json
+{"mcp_qdrant": {"text_field": "text", "models": {"dense": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"}}}
+```
+
+- **New collection** — `qdrant_collection_create` with `text_model` (creates a `dense` vector of
+  the model's size and records it) and/or `text_language` (adds a BM25 index on the text field:
+  stemmed, accent-folded, stopwords removed).
+- **Existing collection** — `qdrant_collection_update` with `text_models`
+  (`{"<vector>": "<model>"}`, `""` for the unnamed vector) declares the model its vectors were
+  made with; the size is checked against the vector. For BM25, create a `text` payload index with
+  `"scoring": true` (and a `stemmer`) on the text field with `qdrant_payload_index_create`.
+- **Write** — `qdrant_points_upsert` with `{"id": 1, "text": "..."}` instead of a vector: one
+  text is one point, nothing is split.
+- **Query** — `qdrant_query` with `query_text` (semantic), `bm25_query` (keywords), or both as
+  `prefetch` stages fused with `"rrf"` (hybrid).
+
+Guard rails: a text longer than the model reads (128 tokens, ~500 characters, for the multilingual
+MiniLM) is refused instead of silently cut — split it into several points; models that need
+query/document prefixes (e5, nomic, ...) aren't offered, since fastembed doesn't add them; a
+collection with points won't switch a vector to a different model (`null` in `text_models`
+removes a wrong declaration first); and `text` into a collection whose vectors have no declared
+model is refused rather than stored without a vector. BM25 with a language needs a Qdrant server —
+the embedded local mode only ranks default-tokenized indexes.
+
+Semantic search needs the `embeddings` extra (the Docker image and the `.mcpb` bundle include it);
+BM25 needs Qdrant 1.20 but no extra. Models are downloaded on first use into
+`FASTEMBED_CACHE_PATH` — set it to a persistent directory (the Docker image uses `/models`, so
+mount a volume there) to download once.
+
 ## Configuration Reference
 
 All configuration is via environment variables, read once at startup — a misconfiguration fails
@@ -243,19 +290,19 @@ The table below is generated directly from the live tool registry — run
 | Tool | Toolset | Read-only | Destructive | Idempotent | Description |
 |---|---|---|---|---|---|
 | `qdrant_health_check` | `core` | ✅ | ❌ | ✅ | Confirm the configured Qdrant instance is reachable and responding. |
-| `qdrant_collection_create` | `core` | ❌ | ❌ | ❌ | Create a collection: either a single unnamed vector (`vector_size` + `distance`), or one or more named vectors (`vectors`, each a full `VectorParams` — size, distance, and optionally its own `multivector_config` for ColBERT-style multi-vectors or `quantization_config`) — exactly one of the two. |
+| `qdrant_collection_create` | `core` | ❌ | ❌ | ❌ | Create a collection: a single unnamed vector (`vector_size` + `distance`), one or more named vectors (`vectors`, each a full `VectorParams` — size, distance, and optionally its own `multivector_config` for ColBERT-style multi-vectors or `quantization_config`), or a text collection (`text_model`) — exactly one of the three. |
 | `qdrant_collection_list` | `core` | ✅ | ❌ | ✅ | List every collection name in the configured Qdrant instance. |
 | `qdrant_collection_info` | `core` | ✅ | ❌ | ✅ | Return full config and status of one collection. |
 | `qdrant_collection_update` | `core` | ❌ | ❌ | ✅ | Update optimizer/HNSW/collection/vector params on an existing collection. |
 | `qdrant_collection_delete` | `core` | ❌ | ✅ | ✅ | Delete a collection and all its points; a no-op if it doesn't exist. |
 | `qdrant_collection_exists` | `core` | ✅ | ❌ | ✅ | Check whether a collection exists, without raising if it doesn't. |
-| `qdrant_points_upsert` | `core` | ❌ | ✅ | ✅ | Insert or replace points (id + vector + payload) in a collection. |
+| `qdrant_points_upsert` | `core` | ❌ | ✅ | ✅ | Insert or replace points (id + vector or text + payload) in a collection. |
 | `qdrant_points_get` | `core` | ✅ | ❌ | ✅ | Retrieve points by id; unknown ids are simply omitted, not an error. |
 | `qdrant_points_delete` | `core` | ❌ | ✅ | ✅ | Delete points by id list or by payload filter — exactly one of the two. |
 | `qdrant_points_scroll` | `core` | ✅ | ❌ | ✅ | Page through all points in a collection, optionally filtered. |
 | `qdrant_points_count` | `core` | ✅ | ❌ | ✅ | Count points in a collection, optionally matching a filter. |
 | `qdrant_query` | `core` | ✅ | ❌ | ✅ | Search a collection with Qdrant's unified Query API: vector similarity, hybrid fusion, multi-stage reranking, MMR diversity, payload-based score formulas, ordering by a payload field, or random sampling. |
-| `qdrant_query_batch` | `search` | ✅ | ❌ | ✅ | Run multiple independent queries against one collection in a single round trip — each item takes every query mode and tuning parameter of `qdrant_query` (plain vector, fusion over prefetch, MMR, formula, order_by, sample, search_params, score_threshold, offset); `timeout_seconds` and `consistency` apply to the whole batch. |
+| `qdrant_query_batch` | `search` | ✅ | ❌ | ✅ | Run multiple independent queries against one collection in a single round trip — each item takes every query mode and tuning parameter of `qdrant_query` (vector, `query_text`, `bm25_query`, fusion over prefetch, MMR, formula, order_by, sample, search_params, score_threshold, offset); `timeout_seconds` and `consistency` apply to the whole batch. |
 | `qdrant_query_groups` | `search` | ✅ | ❌ | ✅ | Vector query grouped by a payload field, up to `group_size` hits per group — e.g. the best-matching chunks per source document. |
 | `qdrant_recommend` | `search` | ✅ | ❌ | ✅ | Find points similar to a set of positive examples and dissimilar to a set of negative ones (vectors or point ids) — Qdrant's recommendation API. |
 | `qdrant_recommend_batch` | `search` | ✅ | ❌ | ✅ | Run multiple independent recommend queries against one collection in a single round trip. |
@@ -345,7 +392,7 @@ your database, set the flag, and there is no code path left for it to write anyt
 ```bash
 git clone https://github.com/avaazquezz/Qdrant-MCP.git
 cd Qdrant-MCP
-uv sync --dev
+uv sync --dev --extra embeddings
 uv run pre-commit install
 ```
 
