@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import cast
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import ResponseHandlingException
@@ -16,8 +17,8 @@ async def test_ping_retries_transport_errors_then_succeeds() -> None:
     mock = AsyncMock()
     ok_response = AsyncMock(collections=[AsyncMock(), AsyncMock()])
     mock.get_collections.side_effect = [
-        ResponseHandlingException(ConnectionError("refused")),
-        ResponseHandlingException(ConnectionError("refused")),
+        ResponseHandlingException(httpx.ConnectError("refused")),
+        ResponseHandlingException(httpx.ConnectError("refused")),
         ok_response,
     ]
     client = cast(AsyncQdrantClient, mock)

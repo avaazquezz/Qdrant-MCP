@@ -357,12 +357,13 @@ def test_slimmed_config_models_accept_real_values() -> None:
 
 
 def test_slimmed_config_models_reject_what_the_real_model_rejects() -> None:
-    for annotated, bad in [
+    cases: list[tuple[Any, Any]] = [
         (HnswConfigDiffInput, {"m": "many"}),
         (HnswConfigDiffInput, {"bogus": 1}),
         (VectorParamsMapInput, {"dense": {"size": 4}}),  # distance is required
         (PayloadIndexSchema, "not-a-type"),
-    ]:
+    ]
+    for annotated, bad in cases:
         assert not _advertised(annotated).is_valid(bad), (annotated, bad)
         with pytest.raises(ValidationError):
             TypeAdapter(annotated).validate_python(bad)

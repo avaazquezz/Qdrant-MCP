@@ -195,3 +195,69 @@ async def test_storage_snapshot_download_without_qdrant_url_raises_tool_error() 
         await server.call_tool(
             "qdrant_storage_snapshot_download", {"snapshot_name": "full-1.snapshot"}
         )
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "http://169.254.169.254/latest/meta-data/",  # cloud metadata endpoint
+        "http://localhost:8080/admin",  # same host, another port
+        "https://localhost:6333/collections/docs/snapshots/x",  # same host, another scheme
+        "gopher://localhost:6333/x",
+        "not a url",
+    ],
+)
+async def test_snapshot_recover_refuses_locations_outside_the_allowed_origins(
+    location: str,
+) -> None:
+    mock = AsyncMock()
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    with pytest.raises(ToolError, match="not allowed"):
+        await server.call_tool(
+            "qdrant_snapshot_recover", {"collection_name": "docs", "location": location}
+        )
+    mock.recover_snapshot.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "file:///qdrant/snapshots/docs/docs-1.snapshot",
+        "http://LOCALHOST:6333/collections/docs/snapshots/docs-1.snapshot",
+        "https://backups.example.com/docs-1.snapshot",
+        "https://backups.example.com:443/docs-1.snapshot",
+    ],
+)
+async def test_snapshot_recover_allows_file_own_origin_and_listed_origins(location: str) -> None:
+    mock = AsyncMock()
+    mock.recover_snapshot.return_value = True
+    server: MCPServer[None] = MCPServer(name="test-server")
+    registry = ToolRegistry(server, enabled_toolsets=("snapshots",), read_only=False)
+    snapshots_tools.register(
+        registry,
+        cast(AsyncQdrantClient, mock),
+        "http://localhost:6333",
+        ("https://backups.example.com",),
+    )
+
+    result = await server.call_tool(
+        "qdrant_snapshot_recover", {"collection_name": "docs", "location": location}
+    )
+    assert isinstance(result, CallToolResult)
+    assert result.is_error is False
+    mock.recover_snapshot.assert_awaited_once()
+
+
+async def test_snapshot_download_url_escapes_names() -> None:
+    mock = AsyncMock()
+    mock.list_snapshots.return_value = [_desc("a b#1.snapshot")]
+    server = _build(cast(AsyncQdrantClient, mock))
+
+    result = await server.call_tool(
+        "qdrant_snapshot_download",
+        {"collection_name": "my/docs", "snapshot_name": "a b#1.snapshot"},
+    )
+    assert isinstance(result, CallToolResult)
+    payload = SnapshotDownloadInfo.model_validate(result.structured_content)
+    assert payload.url == "http://localhost:6333/collections/my%2Fdocs/snapshots/a%20b%231.snapshot"

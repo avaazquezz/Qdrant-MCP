@@ -12,7 +12,7 @@ hands-on that `call_qdrant` still works unchanged against these low-level
 calls — they raise the same `UnexpectedResponse`/`ResponseHandlingException`
 as the high-level client. Unlike the high-level wrapper, these return the
 full response envelope (`result`/`status`/`time`/`usage`), not the
-already-unwrapped domain object — `_unwrap` pulls `result` out.
+already-unwrapped domain object — `require_result` pulls `result` out.
 
 `qdrant_write_protection_get`/`_set` from the original roadmap catalog are
 not implemented: verified hands-on that neither the high-level client nor
@@ -40,7 +40,7 @@ from pydantic import BaseModel
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import QuotaConfig, QuotaStatus, TelemetryData
 
-from mcp_qdrant.tools.errors import call_qdrant
+from mcp_qdrant.tools.errors import call_qdrant, require_result
 from mcp_qdrant.tools.registry import ToolRegistry
 
 _TELEMETRY_ANNOTATIONS = ToolAnnotations(
@@ -91,11 +91,6 @@ class MetricsUrlInfo(BaseModel):
     url: str
 
 
-def _unwrap[T](result: T | None) -> T:
-    assert result is not None
-    return result
-
-
 def _require_qdrant_url(qdrant_url: str | None) -> str:
     if qdrant_url is None:
         raise ToolError(
@@ -118,7 +113,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
         response = await call_qdrant(
             lambda: client.http.service_api.telemetry(details_level=cast(int, details_level))
         )
-        return _unwrap(response.result)
+        return require_result(response.result, "result")
 
     async def qdrant_metrics_prometheus() -> MetricsUrlInfo:
         """Return the URL where Qdrant serves Prometheus-format metrics —
@@ -138,7 +133,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
         Example: {}
         """
         response = await call_qdrant(lambda: client.http.quotas_api.get_quotas())
-        return _unwrap(response.result)
+        return require_result(response.result, "result")
 
     async def qdrant_quotas_set(
         enabled: bool | None = None,
@@ -160,7 +155,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
         response = await call_qdrant(
             lambda: client.http.quotas_api.update_quotas(quota_config=quota_config)
         )
-        return _unwrap(response.result)
+        return require_result(response.result, "result")
 
     async def qdrant_issues_list() -> dict[str, Any]:
         """List the issues Qdrant has detected about its own configuration
@@ -180,7 +175,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
         Example: {}
         """
         response = await call_qdrant(lambda: client.http.beta_api.clear_issues())
-        return _unwrap(response.result)
+        return require_result(response.result, "result")
 
     registry.register(qdrant_telemetry, toolset="observability", annotations=_TELEMETRY_ANNOTATIONS)
     registry.register(

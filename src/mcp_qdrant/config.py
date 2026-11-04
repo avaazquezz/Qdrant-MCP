@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -36,6 +37,21 @@ DEFAULT_MAX_LIMIT = 1000
 # its required arguments at this minimum, so a new default that exceeds it fails there.
 MIN_MAX_LIMIT = 30
 
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def url_origin(url: str) -> tuple[str, str, int] | None:
+    """(scheme, host, port) of an http(s) URL, with the default port filled in so
+    `http://h` and `http://h:80` compare equal; None for anything else."""
+    parts = urlsplit(url)
+    if parts.scheme not in _DEFAULT_PORTS or not parts.hostname:
+        return None
+    try:
+        port = parts.port
+    except ValueError:  # a port that isn't a number in range
+        return None
+    return parts.scheme, parts.hostname, port or _DEFAULT_PORTS[parts.scheme]
+
 
 class Settings(BaseModel):
     """Validated process configuration, built once from environment variables."""
@@ -50,11 +66,22 @@ class Settings(BaseModel):
     http_host: str = "127.0.0.1"
     http_port: int = 8000
     max_limit: Annotated[int, Field(ge=MIN_MAX_LIMIT)] = DEFAULT_MAX_LIMIT
+    snapshot_allowed_origins: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def _check_single_connection_target(self) -> Settings:
         if self.qdrant_url and self.qdrant_local_path:
             raise ValueError("Set only one of QDRANT_URL or QDRANT_LOCAL_PATH, not both.")
+        return self
+
+    @model_validator(mode="after")
+    def _check_snapshot_origins(self) -> Settings:
+        bad = [o for o in self.snapshot_allowed_origins if url_origin(o) is None]
+        if bad:
+            raise ValueError(
+                f"QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS must list http(s) origins such as "
+                f"https://backups.example.com, got {bad}."
+            )
         return self
 
     @model_validator(mode="after")
@@ -99,6 +126,11 @@ class Settings(BaseModel):
             http_host=e.get("QDRANT_MCP_HTTP_HOST", "127.0.0.1"),
             http_port=int(e.get("QDRANT_MCP_HTTP_PORT", "8000")),
             max_limit=_parse_max_limit(e.get("QDRANT_MCP_MAX_LIMIT")),
+            snapshot_allowed_origins=tuple(
+                o.strip()
+                for o in e.get("QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS", "").split(",")
+                if o.strip()
+            ),
         )
 
 

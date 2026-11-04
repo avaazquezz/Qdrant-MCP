@@ -656,6 +656,52 @@ explicar cómo funciona el proyecto de forma completa, fácil, interactiva y muy
   El dominio anterior, `mcp-qdrant-web.vazquezlabs.com`, redirige con 301 (conservando la ruta)
   al nuevo, para no romper enlaces existentes.
 
+### Fases 17–22 — plan aprobado el 2026-11-04
+Objetivo de la etapa (decidido 2026-11-04): **uso real + escaparate**. La cobertura 1:1 de la API
+ya está; el salto está en que Claude pueda buscar por texto, en que el servidor aporte criterio
+experto y en gastar menos contexto. El principio nº1 se reformula en la Fase 18 (texto en consultas
+e inserción, opt-in, sin parsear documentos ni decidir chunking).
+
+| Fase | Rama | Versión | Contenido |
+|---|---|---|---|
+| 17 | `fix/robustness` | v2.7.0 | Qdrant 1.20, reintentos seguros, 429, SSRF, auth en tiempo constante |
+| 17b | `fix/behavior-audit` | v2.7.x | revisión independiente de las afirmaciones anteriores a la Fase 12 |
+| 18 | `feat/text-search` | v2.8.0 | `query_text`, upsert con `text`, BM25 de 1.20, modelos en metadatos de colección |
+| 19 | `feat/context-diet` | v2.9.0 | respuestas más baratas en contexto (primero medir qué lee el cliente) |
+| 20 | `feat/advisor` | v2.10.0 | `qdrant_collection_doctor` y `qdrant_search_quality_eval` (recall@k, latencia) |
+| 21 | `feat/guidance` | v2.11.0 | `instructions` del servidor, prompts MCP, `title` de tool |
+| 22 | — | — | escaparate: escenarios nuevos, landing, vídeo, MCP Registry |
+
+### Fase 17 — `fix/robustness` → v2.7.0
+- `qdrant-client` 1.20.0 y CI contra `qdrant/qdrant:v1.20.0` (con los bumps de dependabot).
+- **Reintentos solo si la petición no llegó a salir** (`httpx.ConnectError`/`ConnectTimeout`/
+  `PoolTimeout`), en `qdrant_retry`, un único sitio y sin flags por tool. `qdrant-client` envuelve
+  *cualquier* fallo de transporte en `ResponseHandlingException` (timeouts de lectura y respuestas
+  ilegibles tras un 200 incluidos), y reintentarlo podía repetir una escritura ya aplicada. Ahora el
+  error dice que la llamada puede haberse aplicado. Las lecturas pierden el reintento ante un timeout
+  de lectura: aceptado.
+- `call_qdrant` traduce también `QdrantException` (429 con `Retry-After`) y `ValueError` del SDK.
+- `qdrant_snapshot_recover` solo acepta `file://`, el origen de `QDRANT_URL` y los orígenes de
+  `QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS` (SSRF: es el servidor de Qdrant quien descarga `location`).
+- Auth con `hmac.compare_digest` sobre bytes; `assert` sobre respuestas del servidor → `ToolError`;
+  URLs de descarga de snapshots con nombres escapados.
+
+**Hallazgos verificados durante la Fase 17** (en vivo, `v1.20.0`):
+- **Los lotes de `qdrant_alias_update` son todo o nada en 1.20.** En 1.19 una operación válida
+  seguida de una inválida dejaba la primera aplicada (hallazgo de la Fase 12); en 1.20 no queda
+  ninguna, tampoco cuando el fallo depende del efecto de una operación anterior (crear un alias y
+  renombrarlo al nombre de una colección existente). El test de integración que fijaba lo contrario
+  falló al subir de versión, que es para lo que estaba.
+- **`offset` con MMR pagina sobre el ranking de MMR en 1.20** (con `limit` 2, `offset` 1 devuelve
+  las posiciones 2–3). En 1.19 se aplicaba dentro de los `limit` resultados.
+- El mensaje de colección inexistente pasa de "doesn't exist" a "does not exist".
+- 1.20 añade la condición `match: {"substring": s}`; el test de no-deriva del schema compacto la
+  detectó.
+- Un `Document` de texto dentro de `qdrant_points_batch_update` ya **no** revienta con el cliente
+  1.20 (la revisión del plan lo había visto en 1.19.1): `Qdrant/bm25` lo embebe el propio servidor y
+  un modelo denso sin fastembed da un `ValueError` con mensaje claro, que ahora se traduce. Por eso no
+  hizo falta el guardia específico que preveía el plan.
+
 ## Versionado
 
 | Versión | Fase cerrada |
@@ -677,6 +723,7 @@ explicar cómo funciona el proyecto de forma completa, fácil, interactiva y muy
 | v2.5.0 | 15 — límites de respuesta y schemas compactos |
 | v2.6.0 | 15b — revisión independiente: correcciones |
 | — | 16 — landing técnica, sin versión de paquete |
+| v2.7.0 | 17 — robustez, seguridad y Qdrant 1.20 |
 
 ---
 *Catálogo de endpoints verificado contra `api.qdrant.tech/master/llms.txt` y el README de

@@ -30,7 +30,7 @@ from qdrant_client.http.models import (
     RenameAliasOperation,
 )
 
-from mcp_qdrant.tools.errors import call_qdrant
+from mcp_qdrant.tools.errors import call_qdrant, require_result
 from mcp_qdrant.tools.registry import ToolRegistry
 
 AliasOperationInput = CreateAliasOperation | DeleteAliasOperation | RenameAliasOperation
@@ -106,12 +106,13 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Each operation is exactly one of `create_alias`
         (`collection_name`, `alias_name`), `rename_alias`
         (`old_alias_name`, `new_alias_name`) or `delete_alias`
-        (`alias_name`). Operations run in order in one request but are NOT
-        rolled back as a group: if a later one fails, the earlier ones stay
-        applied (verified) — check `qdrant_alias_list` after an error.
-        To switch an alias to another collection, send a single
-        `create_alias`: on an alias name that already exists it re-points it,
-        and a single operation is all-or-nothing.
+        (`alias_name`). Operations run in order in one request, all-or-nothing
+        on Qdrant 1.20 (verified: if any operation fails, none is applied,
+        even one whose failure depends on an earlier operation's effect).
+        Older servers (verified on 1.19.0) kept the earlier operations applied
+        — on those, check `qdrant_alias_list` after an error. To switch an
+        alias to another collection, send a single `create_alias`: on an alias
+        name that already exists it re-points it.
 
         Other verified behavior: deleting an alias that doesn't exist is a
         no-op, not an error; an alias can't take the name of an existing
@@ -170,8 +171,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 completed_limit=cast(int, completed_limit),
             )
         )
-        assert response.result is not None
-        return response.result
+        return require_result(response.result, "optimization progress")
 
     registry.register(qdrant_alias_list, toolset="admin", annotations=_ALIAS_LIST_ANNOTATIONS)
     registry.register(

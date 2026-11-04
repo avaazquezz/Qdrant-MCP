@@ -165,7 +165,7 @@ async def test_mmr_promotes_the_dissimilar_point(env: tuple[MCPServer[None], str
     assert _ids(await _query(server, name, **base, mmr={})) != []  # Qdrant's defaults work
 
 
-async def test_mmr_needs_candidates_beyond_limit_and_offset_pages_inside_the_limit(
+async def test_mmr_needs_candidates_beyond_limit_and_offset_pages_the_mmr_ranking(
     env: tuple[MCPServer[None], str],
 ) -> None:
     """Pins the two MMR facts the `qdrant_query` docstring warns about."""
@@ -180,9 +180,11 @@ async def test_mmr_needs_candidates_beyond_limit_and_offset_pages_inside_the_lim
     assert no_candidates == plain_top2  # candidates_limit defaults to limit: nothing to choose from
     assert 4 in wide and 4 not in no_candidates
 
+    # Qdrant 1.20: offset pages the MMR ranking (1.19 applied it inside the limit).
     mmr = {"diversity": 0.9, "candidates_limit": 10}
-    assert len(_ids(await _query(server, name, **base, limit=2, mmr=mmr, offset=1))) == 1
-    assert _ids(await _query(server, name, **base, limit=2, mmr=mmr, offset=2)) == []
+    ranking = _ids(await _query(server, name, **base, limit=4, mmr=mmr))
+    assert _ids(await _query(server, name, **base, limit=2, mmr=mmr, offset=1)) == ranking[1:3]
+    assert _ids(await _query(server, name, **base, limit=2, mmr=mmr, offset=2)) == ranking[2:4]
 
 
 async def test_formula_rescores_a_prefetch_with_a_payload_boost(
