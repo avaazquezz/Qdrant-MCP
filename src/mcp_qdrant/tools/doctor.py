@@ -25,7 +25,7 @@ from qdrant_client.http.models import (
     VectorParams,
 )
 
-from mcp_qdrant.tools.collections import _dense_size
+from mcp_qdrant.tools.collections import dense_vector_size
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.registry import ToolRegistry
 from mcp_qdrant.tools.text_shared import METADATA_KEY, contract_from_metadata
@@ -264,7 +264,7 @@ def _text_contract(name: str, info: CollectionInfo) -> list[DoctorFinding]:
             ),
         )
         for vector, model in contract.models.items()
-        if _dense_size(info, vector) is None
+        if dense_vector_size(info, vector) is None
     ]
     field = contract.text_field
     index = info.payload_schema.get(field)
