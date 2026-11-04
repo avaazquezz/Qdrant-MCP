@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import CreateAlias, CreateAliasOperation
@@ -120,3 +121,22 @@ async def test_keyword_only_collection_stores_text_and_ranks_it(env: Env) -> Non
     points = [{"id": i, "text": text} for i, text in DOCS.items()]
     await _call(server, "qdrant_points_upsert", {"collection_name": name, "points": points})
     assert set(await _ids(server, {"collection_name": name, "bm25_query": "ayudas jóvenes"})) == {1}
+
+
+async def test_a_text_longer_than_the_model_reads_is_refused(env: Env) -> None:
+    """The model reads 128 tokens: past that, fastembed silently drops the rest — two texts that
+    differ only after it get identical vectors — so the server refuses instead of storing a
+    vector that ignores part of the text."""
+    from fastembed import TextEmbedding
+
+    server, _, name = env
+    base = "La ley regula el acceso a la vivienda de los jóvenes en zonas tensionadas. " * 12
+    tail = " Además se crean becas universitarias para estudiantes de ingeniería agrícola."
+    plain, longer = TextEmbedding(MODEL).passage_embed([base, base + tail])
+    assert (plain == longer).all()
+
+    await _call(server, "qdrant_collection_create", {"collection_name": name, "text_model": MODEL})
+    with pytest.raises(ToolError, match="longer than .* reads \\(128 tokens\\)"):
+        await server.call_tool(
+            "qdrant_points_upsert", {"collection_name": name, "points": [{"id": 1, "text": base}]}
+        )

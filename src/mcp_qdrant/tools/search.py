@@ -407,6 +407,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Example: {"collection_name": "docs", "positive": [1, 2], "negative": [7]}
         """
         registry.check_limit(limit)
+        prefetch = await TextResolver(client, collection_name).resolve_prefetch(prefetch)
         return await call_qdrant(
             lambda: client.query_points(
                 collection_name,
@@ -443,7 +444,11 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         ]}
         """
         registry.check_limit(sum(r.limit for r in requests), "the total limit of all requests")
-        built = [r.to_request() for r in requests]
+        text = TextResolver(client, collection_name)
+        built = [
+            r.model_copy(update={"prefetch": await text.resolve_prefetch(r.prefetch)}).to_request()
+            for r in requests
+        ]
         return await call_qdrant(
             lambda: client.query_batch_points(
                 collection_name,
@@ -481,6 +486,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             "positive": [1, 2], "group_size": 2}
         """
         registry.check_limit(limit * group_size, "limit × group_size")
+        prefetch = await TextResolver(client, collection_name).resolve_prefetch(prefetch)
         return await call_qdrant(
             lambda: client.query_points_groups(
                 collection_name,
@@ -532,6 +538,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         ]}
         """
         registry.check_limit(limit)
+        prefetch = await TextResolver(client, collection_name).resolve_prefetch(prefetch)
         return await call_qdrant(
             lambda: client.query_points(
                 collection_name,
@@ -567,7 +574,11 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         ]}
         """
         registry.check_limit(sum(r.limit for r in requests), "the total limit of all requests")
-        built = [r.to_request() for r in requests]
+        text = TextResolver(client, collection_name)
+        built = [
+            r.model_copy(update={"prefetch": await text.resolve_prefetch(r.prefetch)}).to_request()
+            for r in requests
+        ]
         return await call_qdrant(
             lambda: client.query_batch_points(
                 collection_name,

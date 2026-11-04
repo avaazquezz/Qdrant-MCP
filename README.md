@@ -227,6 +227,14 @@ plausible-looking nonsense with no error):
 - **Query** — `qdrant_query` with `query_text` (semantic), `bm25_query` (keywords), or both as
   `prefetch` stages fused with `"rrf"` (hybrid).
 
+Guard rails: a text longer than the model reads (128 tokens, ~500 characters, for the multilingual
+MiniLM) is refused instead of silently cut — split it into several points; models that need
+query/document prefixes (e5, nomic, ...) aren't offered, since fastembed doesn't add them; a
+collection with points won't switch a vector to a different model (`null` in `text_models`
+removes a wrong declaration first); and `text` into a collection whose vectors have no declared
+model is refused rather than stored without a vector. BM25 with a language needs a Qdrant server —
+the embedded local mode only ranks default-tokenized indexes.
+
 Semantic search needs the `embeddings` extra (the Docker image and the `.mcpb` bundle include it);
 BM25 needs Qdrant 1.20 but no extra. Models are downloaded on first use into
 `FASTEMBED_CACHE_PATH` — set it to a persistent directory (the Docker image uses `/models`, so

@@ -26,6 +26,16 @@ one text is one point.
 - Optional extra **`mcp-qdrant[embeddings]`** (fastembed). The Docker image and the `.mcpb` bundle
   include it; models are downloaded on first use into `FASTEMBED_CACHE_PATH` (`/models` in Docker).
 
+An independent review of the feature before release (Fase 18b) found 14 defects, all reproduced
+and fixed here. The text path now refuses what it used to get silently wrong: a text longer than
+the model reads (it was cut, two texts differing past the limit got identical vectors), `text`
+into a collection whose vectors have no declared model (the point was stored without a vector),
+models that need query/document prefixes fastembed doesn't add, switching a populated collection
+to a different model of the same size, a dotted `text_field` (BM25 could never find the text), and
+empty text. Recommend and discover prefetch stages now resolve `query_text`/`bm25_query` too, each
+model has its own lock (one slow download no longer blocks every other text call), and upserts
+count their `text` points against `QDRANT_MCP_MAX_LIMIT`.
+
 ### Fixed
 - **The `.mcpb` bundle never started** (since v1.0.0): it ran `src/mcp_qdrant/cli.py` as a script,
   which let this package's `qdrant_client.py` shadow the real `qdrant_client`. It now runs the

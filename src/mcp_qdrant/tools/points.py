@@ -23,7 +23,7 @@ from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector, page_offset
 from mcp_qdrant.tools.registry import ToolRegistry
 from mcp_qdrant.tools.schemas import FilterInput, StrictInput
-from mcp_qdrant.tools.text_shared import read_contract
+from mcp_qdrant.tools.text_shared import contract_from_metadata
 
 _UPSERT_ANNOTATIONS = ToolAnnotations(
     title="Upsert Qdrant points",
@@ -83,12 +83,30 @@ async def _embed_text_points(
     texts = [p.text for p in points if p.text is not None]
     if not texts:
         return []
-    contract = await read_contract(client, collection_name)
+    info = await call_qdrant(lambda: client.get_collection(collection_name))
+    contract = contract_from_metadata(info.config.metadata, collection_name)
     if contract is None:
         raise ToolError(
             f"Collection {collection_name!r} declares no text setup, so `text` can't be "
             "embedded: send `vector` instead, or declare the model with "
             "`qdrant_collection_update` (`text_models`)."
+        )
+    has_vectors = bool(info.config.params.vectors) or bool(info.config.params.sparse_vectors)
+    if not contract.models and has_vectors:
+        # Without a model the point would be stored with no vector at all, unreachable by any
+        # vector query — and Qdrant accepts that without complaint (verified).
+        raise ToolError(
+            f"Collection {collection_name!r} has vectors but no declared text model, so a "
+            "`text` point would be stored without any vector. Declare the model with "
+            "`qdrant_collection_update` (`text_models`), or send `vector`."
+        )
+    clashing = [
+        p.id for p in points if p.text is not None and contract.text_field in (p.payload or {})
+    ]
+    if clashing:
+        raise ToolError(
+            f"Points {clashing} set both `text` and `payload.{contract.text_field}`, the field "
+            "`text` is stored in: give the text only once."
         )
     # No models (a keyword-only collection, see `text_language`): the text is only stored.
     by_vector = {
@@ -130,7 +148,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         (`{"indices": [...], "values": [...]}`). Give `text` instead of `vector`
         to have it embedded with every model the collection declares (see
         `qdrant_collection_create`'s `text_model`) and stored in its text field
-        — one text is one point, nothing is split. Needs the `embeddings` extra.
+        — one text is one point, nothing is split. A text longer than the model
+        reads (128 tokens, ~500 characters, for the multilingual MiniLM) is
+        refused rather than silently cut: split it into several points. Needs
+        the `embeddings` extra.
 
         `update_mode` makes the write conditional: `insert_only` never
         overwrites an existing id, `update_only` never creates a new one
@@ -154,6 +175,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         """
         if any((p.vector is None) == (p.text is None) for p in points):
             raise ToolError("Each point needs exactly one of `vector` or `text`.")
+        registry.check_limit(sum(p.text is not None for p in points), "the number of `text` points")
         # PointInput.vector is a narrower union than PointStruct.vector (excludes
         # Document/Image/InferenceObject); dict value types are invariant in mypy,
         # so a plain assignment doesn't widen it.

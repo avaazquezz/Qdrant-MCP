@@ -186,14 +186,8 @@ def build_query_value(
 def build_prefetch_list(prefetch: list[PrefetchInput] | None) -> list[Prefetch] | None:
     if prefetch is None:
         return None
+    # `query_text` was already turned into `query_vector` (TextResolver.resolve_prefetch).
     for stage in prefetch:
-        if stage.query_text is not None:
-            # Text is resolved before this point by the tools that accept it
-            # (qdrant_query, _batch, _groups); the others never embed.
-            raise ToolError(
-                "`query_text` in a prefetch stage is only supported by qdrant_query, "
-                "qdrant_query_batch and qdrant_query_groups."
-            )
         if sum(m is not None for m in (stage.query_vector, stage.bm25_query, stage.fusion)) != 1:
             raise ToolError(
                 "A prefetch stage needs exactly one of `query_vector`, `query_text`, "

@@ -41,6 +41,7 @@ from mcp_qdrant.tools.text_shared import (
     METADATA_KEY,
     TextContract,
     contract_from_metadata,
+    new_contract,
 )
 
 # The named vector `text_model` creates.
@@ -146,7 +147,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         on_disk_payload: bool | None = None,
         text_model: str | None = None,
         text_language: SnowballLanguage | None = None,
-        text_field: str = DEFAULT_TEXT_FIELD,
+        text_field: str | None = None,
     ) -> CollectionInfo:
         """Create a collection: a single unnamed vector (`vector_size` +
         `distance`), one or more named vectors (`vectors`, each a full
@@ -162,8 +163,11 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         of the model's size and records the model in the collection's metadata,
         so `text` in `qdrant_points_upsert` and `query_text` in `qdrant_query`
         embed with it. `text_language` (e.g. "spanish") adds a BM25 index on
-        `text_field` for `bm25_query`: stemmed, accent-folded, stopwords
-        removed; given alone, it makes a keyword-only collection with no vectors.
+        `text_field` (default `text`) for `bm25_query`: stemmed, accent-folded,
+        stopwords removed where Qdrant has a list for the language (all but
+        armenian and tamil); given alone, it makes a keyword-only collection
+        with no vectors. The embedded local mode (QDRANT_LOCAL_PATH) can't rank
+        such an index — BM25 there needs the default tokenization.
         `quantization_config` (scalar/product/binary) and
         `strict_mode_config` apply to the whole collection.
 
@@ -191,6 +195,12 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 "Provide exactly one of `vector_size`, `vectors` or `text_model` (or only "
                 "`text_language`, for a keyword-only collection)."
             )
+        is_text = text_model is not None or text_language is not None
+        if text_field is not None and not is_text:
+            raise ToolError("`text_field` only applies with `text_model` or `text_language`.")
+        if text_model is not None and distance != "Cosine":
+            raise ToolError("A `text_model` collection always uses Cosine; drop `distance`.")
+        field = text_field or DEFAULT_TEXT_FIELD
         vectors_config: VectorParams | dict[str, VectorParams] = {}
         if vector_size is not None:
             vectors_config = VectorParams(size=vector_size, distance=Distance(distance))
@@ -201,14 +211,16 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             model, size = embeddings.model_info(text_model)
             vectors_config = {TEXT_VECTOR: VectorParams(size=size, distance=Distance.COSINE)}
             models = {TEXT_VECTOR: model}
-        if text_model is not None or text_language is not None:
+        if is_text:
             if metadata and METADATA_KEY in metadata:
                 raise ToolError(
                     f"`metadata.{METADATA_KEY}` is written by `text_model`/`text_language`; "
                     "don't set it yourself."
                 )
-            contract = TextContract(text_field=text_field, models=models)
+            contract = new_contract(field, models)
             metadata = {**(metadata or {}), METADATA_KEY: contract.model_dump()}
+        else:
+            contract_from_metadata(metadata, collection_name)  # a hand-written one must parse
         await call_qdrant(
             lambda: client.create_collection(
                 collection_name,
@@ -227,7 +239,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 await call_qdrant(
                     lambda: client.create_payload_index(
                         collection_name,
-                        field_name=text_field,
+                        field_name=field,
                         field_schema=_bm25_index(text_language),
                         wait=True,
                     )
@@ -235,7 +247,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             except ToolError as exc:
                 raise ToolError(
                     f"Collection {collection_name!r} was created, but its BM25 index on "
-                    f"{text_field!r} failed: {exc}. Create it with `qdrant_payload_index_create`."
+                    f"{field!r} failed: {exc}. Create it with `qdrant_payload_index_create`."
                 ) from exc
         return await call_qdrant(lambda: client.get_collection(collection_name))
 
@@ -264,7 +276,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         quantization_config: QuantizationConfigInput | Literal["disabled"] | None = None,
         sparse_vectors_config: SparseVectorParamsMapInput | None = None,
         strict_mode_config: StrictModeConfigInput | None = None,
-        text_models: dict[str, str] | None = None,
+        text_models: dict[str, str | None] | None = None,
         text_field: str | None = None,
     ) -> CollectionInfo:
         """Update optimizer/HNSW/collection/vector params on an existing
@@ -274,8 +286,11 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         vector (`{"<vector name>": "<model>"}`, `""` for the unnamed vector), so
         `query_text` and `text` upserts work on a collection built elsewhere —
         it must be the model the stored vectors were made with, and its size
-        must match the vector's. `text_field` names the payload field holding
-        the text (default `text`). Both are kept in the collection's metadata.
+        must match the vector's. `null` removes a declaration (e.g. after
+        deleting that vector). A collection with points won't switch a vector
+        to a different model: remove the declaration first if it was wrong.
+        `text_field` names the payload field holding the text (default `text`).
+        Both are kept in the collection's metadata.
 
         Only the fields you pass are changed; omitted ones keep their current
         value. `quantization_config="disabled"` turns quantization off.
@@ -297,6 +312,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             contract = contract or TextContract()
             models = dict(contract.models)
             for vector_name, requested in (text_models or {}).items():
+                if requested is None:
+                    models.pop(vector_name, None)
+                    continue
                 model, size = embeddings.model_info(requested)
                 actual = _dense_size(info, vector_name)
                 if actual is None:
@@ -309,8 +327,17 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                         f"{model} makes {size}-dimensional vectors, but {vector_name!r} holds "
                         f"{actual}-dimensional ones: it can't be the model they were made with."
                     )
+                declared = models.get(vector_name)
+                if declared not in (None, model) and info.points_count:
+                    # Same size isn't the same model: queries would come back plausible-looking
+                    # and wrong, with no error.
+                    raise ToolError(
+                        f"{vector_name!r} is declared as {declared} and the collection has points "
+                        f"made with it; {model} would give wrong results. If the declaration "
+                        f'is wrong, remove it first with `text_models: {{"{vector_name}": null}}`.'
+                    )
                 models[vector_name] = model
-            new = TextContract(text_field=text_field or contract.text_field, models=models)
+            new = new_contract(text_field or contract.text_field, models)
             # Qdrant merges metadata only at the top level (verified), so the whole key is
             # rewritten.
             metadata = {METADATA_KEY: new.model_dump()}

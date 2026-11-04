@@ -762,6 +762,23 @@ Texto en vez de vectores, sin tools nuevas (precedente de la Fase 14): `qdrant_q
   console script `mcp-qdrant`, y un test de integración arranca el servidor con los argumentos exactos
   del manifest y le habla con un cliente MCP real.
 
+**18b — revisión independiente antes del tag** (mismo método que la 15b y la 17b; cada hallazgo
+reproducido por mí). 14 defectos, ninguno alto; los que más importaban eran silenciosos:
+- `text` en una colección con vectores pero sin modelo declarado guardaba el punto **sin vector**.
+- Un texto más largo que lo que lee el modelo (128 tokens) se **truncaba**: verificado que dos textos
+  que solo difieren pasado el límite dan vectores idénticos. Ahora se rechaza.
+- fastembed **no añade los prefijos** de consulta/documento (e5, nomic, snowflake...): el comentario
+  que decía lo contrario era falso. Esos modelos se excluyen.
+- Redeclarar otro modelo de la misma dimensión en una colección con puntos se aceptaba; ahora exige
+  quitar antes la declaración (`null`).
+- Un `text_field` con punto se escribía como clave literal y el índice lo leía como ruta anidada:
+  BM25 no lo encontraba nunca.
+- El lock global se mantenía durante la descarga de un modelo; ahora hay uno por modelo.
+- Además: texto vacío, tope de textos por upsert, conflicto `text` / `payload.<campo>`, valores que se
+  ignoraban en silencio (`text_field` sin opciones de texto, `distance` con `text_model`), metadatos
+  mal formados aceptados en `create`, y `query_text` anunciado pero rechazado en el prefetch de
+  recommend/discover (ahora se resuelve).
+
 ## Versionado
 
 | Versión | Fase cerrada |

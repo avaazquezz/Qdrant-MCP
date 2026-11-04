@@ -236,13 +236,31 @@ async def test_query_batch_and_groups_take_the_text_modes(
     assert mock.query_points_groups.call_args.kwargs["using"] == "dense"
 
 
-async def test_query_text_in_a_recommend_prefetch_is_refused_not_ignored() -> None:
+async def test_recommend_and_discover_resolve_text_in_their_prefetch(
+    embedded: list[tuple[str, list[str], bool]],
+) -> None:
     mock = _client()
-    with pytest.raises(ToolError, match="only supported by qdrant_query"):
-        await _server(mock).call_tool(
-            "qdrant_recommend",
-            {"collection_name": "docs", "positive": [1], "prefetch": [{"query_text": "x"}]},
-        )
+    server = _server(mock)
+    stages = [{"query_text": "casa"}, {"bm25_query": "casa"}]
+    await _ok(
+        server, "qdrant_recommend", {"collection_name": "docs", "positive": [1], "prefetch": stages}
+    )
+    semantic, bm25 = mock.query_points.call_args.kwargs["prefetch"]
+    assert (semantic.query, semantic.using) == ([4.0, 1.0], "dense")
+    assert isinstance(bm25.query, TextQuery) and bm25.using == "body"
+
+    await _ok(
+        server,
+        "qdrant_discover_batch",
+        {
+            "collection_name": "docs",
+            "requests": [
+                {"target": 1, "context": [{"positive": 2, "negative": 3}], "prefetch": stages}
+            ],
+        },
+    )
+    [request] = mock.query_batch_points.call_args.kwargs["requests"]
+    assert request.prefetch[0].using == "dense" and request.prefetch[1].using == "body"
 
 
 # --- text in upserts -------------------------------------------------------------------
@@ -487,3 +505,129 @@ async def test_query_text_with_an_explicit_declared_vector(
         _server(mock), "qdrant_query", {"collection_name": "docs", "query_text": "x", "using": "b"}
     )
     assert mock.query_points.call_args.kwargs["using"] == "b"
+
+
+# --- review 18b: guards ----------------------------------------------------------------
+
+
+def test_models_that_need_prefixes_are_refused() -> None:
+    with pytest.raises(ToolError, match="need query/document prefixes"):
+        embeddings.model_info("intfloat/multilingual-e5-large")
+
+
+def test_each_model_has_its_own_lock() -> None:
+    assert embeddings._lock_for("a") is embeddings._lock_for("a")
+    assert embeddings._lock_for("a") is not embeddings._lock_for("b")
+
+
+@pytest.mark.parametrize("text", ["", "   \n"])
+async def test_empty_text_is_refused(text: str) -> None:
+    with pytest.raises(ToolError, match="Text to embed is empty"):
+        await embeddings.embed(MODEL, [text], is_query=True)
+
+
+async def test_upsert_text_refuses_a_collection_with_vectors_but_no_model(
+    embedded: list[tuple[str, list[str], bool]],
+) -> None:
+    mock = _client(
+        {"mcp_qdrant": {"models": {}}}, vectors=VectorParams(size=4, distance=Distance.COSINE)
+    )
+    with pytest.raises(ToolError, match="would be stored without any vector"):
+        await _server(mock).call_tool(
+            "qdrant_points_upsert", {"collection_name": "docs", "points": [{"id": 1, "text": "x"}]}
+        )
+    mock.upsert.assert_not_called()
+
+
+async def test_upsert_text_refuses_a_payload_that_already_has_the_text_field(
+    embedded: list[tuple[str, list[str], bool]],
+) -> None:
+    mock = _client()
+    with pytest.raises(ToolError, match=r"Points \[1\] set both `text` and `payload.body`"):
+        await _server(mock).call_tool(
+            "qdrant_points_upsert",
+            {
+                "collection_name": "docs",
+                "points": [{"id": 1, "text": "x", "payload": {"body": "y"}}],
+            },
+        )
+
+
+async def test_upsert_text_counts_against_the_result_cap(
+    embedded: list[tuple[str, list[str], bool]],
+) -> None:
+    mock = _client()
+    server: MCPServer[None] = MCPServer(name="test-server")
+    registry = ToolRegistry(server, enabled_toolsets=("core",), read_only=False, max_limit=30)
+    points_tools.register(registry, cast(AsyncQdrantClient, mock))
+    points = [{"id": i, "text": "x"} for i in range(31)]
+    with pytest.raises(ToolError, match="the number of `text` points is 31"):
+        await server.call_tool(
+            "qdrant_points_upsert", {"collection_name": "docs", "points": points}
+        )
+    assert embedded == []
+
+
+@pytest.mark.parametrize(
+    ("args", "error"),
+    [
+        ({"text_language": "english", "text_field": "doc.body"}, "plain top-level payload key"),
+        ({"vector_size": 4, "text_field": "body"}, "`text_field` only applies"),
+        ({"text_model": MODEL, "distance": "Dot"}, "always uses Cosine"),
+        ({"vector_size": 4, "metadata": {"mcp_qdrant": {"models": 1}}}, "malformed"),
+    ],
+)
+async def test_create_refuses_inputs_it_would_otherwise_ignore_or_mangle(
+    embedded: list[tuple[str, list[str], bool]], args: dict[str, Any], error: str
+) -> None:
+    mock = _client()
+    with pytest.raises(ToolError, match=error):
+        await _server(mock).call_tool(
+            "qdrant_collection_create", {"collection_name": "notes", **args}
+        )
+    mock.create_collection.assert_not_called()
+
+
+async def test_update_removes_a_declaration_with_null(
+    embedded: list[tuple[str, list[str], bool]],
+) -> None:
+    contract = {"mcp_qdrant": {"text_field": "body", "models": {"a": MODEL, "b": MODEL}}}
+    mock = _client(contract, vectors={"a": VectorParams(size=384, distance=Distance.COSINE)})
+    await _ok(
+        _server(mock),
+        "qdrant_collection_update",
+        {"collection_name": "docs", "text_models": {"b": None}},
+    )
+    assert mock.update_collection.call_args.kwargs["metadata"] == {
+        "mcp_qdrant": {"text_field": "body", "models": {"a": MODEL}}
+    }
+
+
+@pytest.mark.parametrize(("points", "refused"), [(6, True), (0, False)])
+async def test_update_wont_switch_the_model_of_a_collection_with_points(
+    monkeypatch: pytest.MonkeyPatch, points: int, refused: bool
+) -> None:
+    monkeypatch.setattr(embeddings, "model_info", lambda model: (model, 384))
+    info = _info(
+        {"mcp_qdrant": {"models": {"dense": MODEL}}},
+        {"dense": VectorParams(size=384, distance=Distance.COSINE)},
+    )
+    mock = _client()
+    mock.get_collection.return_value = info.model_copy(update={"points_count": points})
+    args = {"collection_name": "docs", "text_models": {"dense": "BAAI/bge-small-en-v1.5"}}
+    if refused:
+        with pytest.raises(ToolError, match="remove it first"):
+            await _server(mock).call_tool("qdrant_collection_update", args)
+        mock.update_collection.assert_not_called()
+    else:
+        await _ok(_server(mock), "qdrant_collection_update", args)
+
+
+async def test_update_refuses_a_dotted_text_field(
+    embedded: list[tuple[str, list[str], bool]],
+) -> None:
+    mock = _client(None, vectors=VectorParams(size=384, distance=Distance.COSINE))
+    with pytest.raises(ToolError, match="plain top-level payload key"):
+        await _server(mock).call_tool(
+            "qdrant_collection_update", {"collection_name": "docs", "text_field": "a.b"}
+        )

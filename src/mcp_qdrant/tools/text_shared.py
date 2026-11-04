@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from mcp.server.mcpserver.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, field_validator
 from qdrant_client import AsyncQdrantClient
 
 from mcp_qdrant import embeddings
@@ -31,6 +31,24 @@ DEFAULT_TEXT_FIELD = "text"
 class TextContract(BaseModel):
     text_field: str = DEFAULT_TEXT_FIELD
     models: dict[str, str] = {}
+
+    @field_validator("text_field")
+    @classmethod
+    def _plain_key(cls, value: str) -> str:
+        # Upserts write the text under this literal key, while a payload index (and BM25) reads
+        # `a.b` as a nested path — so a dotted name could never be found (verified).
+        if not value or "." in value or "[" in value:
+            raise ValueError(
+                f"`text_field` must be a plain top-level payload key (no `.` or `[`), got {value!r}"
+            )
+        return value
+
+
+def new_contract(text_field: str, models: dict[str, str]) -> TextContract:
+    try:
+        return TextContract(text_field=text_field, models=models)
+    except ValidationError as exc:
+        raise ToolError(exc.errors()[0]["msg"].removeprefix("Value error, ")) from exc
 
 
 def _declare_hint(collection: str) -> str:
