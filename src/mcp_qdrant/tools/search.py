@@ -370,9 +370,11 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     ) -> QueryResponse:
         """Find points similar to a set of positive examples and dissimilar
         to a set of negative ones (vectors or point ids) — Qdrant's
-        recommendation API. Requires at least one of `positive`/`negative`;
-        the server rejects an empty request with a clear error. Examples may
-        be dense, multi- or sparse vectors, matching `using`.
+        recommendation API. With the default `average_vector` strategy at
+        least one `positive` example is required; negative-only needs
+        `strategy` `best_score` or `sum_scores` (verified). An empty request is
+        rejected with a clear error. Examples may be dense, multi- or sparse
+        vectors, matching `using`.
 
         Takes the same tuning parameters as `qdrant_query`: `search_params`,
         `score_threshold`, `offset`, `timeout_seconds`, `consistency`.

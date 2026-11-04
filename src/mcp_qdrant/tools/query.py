@@ -67,7 +67,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Exactly one query mode is required:
         - `query_vector` — nearest points to a dense vector, a multivector (list
           of vectors), a sparse vector (`{"indices": [...], "values": [...]}`),
-          or a point id whose stored vector is reused. It must match the vector
+          or a point id whose stored vector is reused (that point itself is left
+          out of the results). It must match the vector
           selected with `using`. Add `mmr` (`diversity` 0..1,
           `candidates_limit`) to re-order the nearest candidates for diversity:
           set `candidates_limit` well above `limit` (it defaults to `limit`,

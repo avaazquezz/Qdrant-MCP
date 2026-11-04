@@ -105,8 +105,8 @@ class SnapshotDownloadInfo(BaseModel):
 
 
 class SnapshotDeleteResult(BaseModel):
-    """True if the snapshot existed and was removed; False is a no-op, not
-    an error (same convention as `CollectionDeleteResult`)."""
+    """True when the snapshot was removed. Unlike `qdrant_collection_delete`,
+    deleting a snapshot that doesn't exist is an error, not a False (verified)."""
 
     deleted: bool
 
@@ -177,7 +177,8 @@ def register(
         collection_name: str, snapshot_name: str
     ) -> SnapshotDeleteResult:
         """Delete a collection snapshot, freeing its disk space on the
-        server — does not touch the live collection.
+        server — does not touch the live collection. Fails if the snapshot
+        doesn't exist.
 
         Example: {"collection_name": "docs", "snapshot_name": "docs-....snapshot"}
         """
@@ -191,9 +192,12 @@ def register(
         checksum: str | None = None,
         api_key: str | None = None,
     ) -> SnapshotRecoverResult:
-        """Overwrite `collection_name` with the state captured in a
-        snapshot — everything written since that snapshot is lost. Creates
-        the collection if it doesn't exist.
+        """Restore the points (vectors and payload) captured in a snapshot
+        into `collection_name` — points written since the snapshot are lost.
+        On an existing collection, its current configuration (e.g. optimizer
+        settings), payload indexes and aliases are kept, not rolled back to the
+        snapshot's (verified). A missing collection is created with the
+        snapshot's configuration.
 
         `location` must be reachable by the Qdrant **server itself**, not
         necessarily by whoever calls this tool: an HTTP(S) URL (e.g. from
@@ -245,8 +249,9 @@ def register(
         )
 
     async def qdrant_storage_snapshot_create() -> SnapshotDescription:
-        """Create a snapshot of the whole storage (every collection and
-        server config), not just one collection.
+        """Create a snapshot of the whole storage: a snapshot of every
+        collection plus the alias mapping (verified: no server configuration
+        is included), not just one collection.
 
         Example: {}
         """
@@ -261,7 +266,8 @@ def register(
         return await call_qdrant(lambda: client.list_full_snapshots())
 
     async def qdrant_storage_snapshot_delete(snapshot_name: str) -> SnapshotDeleteResult:
-        """Delete a full-storage snapshot, freeing its disk space.
+        """Delete a full-storage snapshot, freeing its disk space. Fails if
+        the snapshot doesn't exist.
 
         Example: {"snapshot_name": "full-....snapshot"}
         """

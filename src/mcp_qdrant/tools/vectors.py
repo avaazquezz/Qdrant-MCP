@@ -202,7 +202,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         """Replace the vector(s) of existing points by id — leaves their
         payload untouched. For a named-vector collection, `vector` is a
         dict keyed by vector name; for a single unnamed vector, pass a
-        plain vector.
+        plain vector. An id that doesn't exist fails the whole call ("No
+        point with id … found"), yet the ids that do exist in it are still
+        written (verified) — re-read them before retrying.
 
         Example: {"collection_name": "docs", "points": [
             {"id": 1, "vector": [0.1, 0.2, 0.3, 0.4]}
@@ -225,6 +227,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         """Remove specific named vectors from selected points, keeping
         their payload and other vectors — exactly one of
         `ids`/`points_filter`.
+        An id that doesn't exist fails the whole call ("No point with id …
+        found"), yet the ids that do exist in it are still written (verified)
+        — re-read them before retrying. A filter that matches nothing is not
+        an error.
 
         Example: {"collection_name": "docs", "vector_names": ["sparse"], "ids": [1]}
         """

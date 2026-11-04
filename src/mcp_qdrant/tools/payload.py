@@ -82,7 +82,8 @@ _FACET_ANNOTATIONS = ToolAnnotations(
 _INDEX_CREATE_ANNOTATIONS = ToolAnnotations(
     title="Create a Qdrant payload index",
     read_only_hint=False,
-    destructive_hint=False,
+    # An existing index on the field with another schema is silently replaced.
+    destructive_hint=True,
     idempotent_hint=True,
     open_world_hint=True,
 )
@@ -107,6 +108,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         `ids`/`points_filter`. Existing keys not in `payload` are kept.
         `key` sets a nested sub-field (e.g. `"metadata.author"`) instead of
         merging at the payload root.
+        An id that doesn't exist fails the whole call ("No point with id …
+        found"), yet the ids that do exist in it are still written (verified)
+        — re-read them before retrying. A filter that matches nothing is not
+        an error.
 
         Example: {"collection_name": "docs", "ids": [1], "payload": {"city": "ny"}}
         """
@@ -124,6 +129,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         """Replace the entire payload of selected points with `payload` —
         exactly one of `ids`/`points_filter`. Unlike `qdrant_payload_set`,
         existing keys not in `payload` are dropped.
+        An id that doesn't exist fails the whole call ("No point with id …
+        found"), yet the ids that do exist in it are still written (verified)
+        — re-read them before retrying. A filter that matches nothing is not
+        an error.
 
         Example: {"collection_name": "docs", "ids": [1], "payload": {"city": "ny"}}
         """
@@ -140,6 +149,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     ) -> UpdateResult:
         """Delete specific payload keys from selected points — exactly one
         of `ids`/`points_filter`. Other keys are untouched.
+        An id that doesn't exist fails the whole call ("No point with id …
+        found"), yet the ids that do exist in it are still written (verified)
+        — re-read them before retrying. A filter that matches nothing is not
+        an error.
 
         Example: {"collection_name": "docs", "ids": [1], "keys": ["city"]}
         """
@@ -155,6 +168,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     ) -> UpdateResult:
         """Wipe the entire payload of selected points, keeping their
         vectors — exactly one of `ids`/`points_filter`.
+        An id that doesn't exist fails the whole call ("No point with id …
+        found"), yet the ids that do exist in it are still written (verified)
+        — re-read them before retrying. A filter that matches nothing is not
+        an error.
 
         Example: {"collection_name": "docs", "ids": [1]}
         """
@@ -172,7 +189,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     ) -> FacetResponse:
         """Count distinct values of a payload field across the collection
         (or a filtered subset) — e.g. how many points per `city`. `exact`
-        trades speed for an exact count instead of an approximation.
+        trades speed for an exact count instead of an approximation. The field
+        needs a `keyword`, `integer`, `uuid` or `bool` payload index; without
+        one Qdrant answers "No appropriate index for faceting".
 
         Example: {"collection_name": "docs", "key": "city", "limit": 20}
         """
@@ -190,7 +209,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         use it. `field_schema` can be a simple type name ("keyword",
         "integer", "float", "geo", "text", "bool", "datetime", "uuid") or a
         detailed params object (e.g. a `text` index with a specific
-        tokenizer, or a `keyword` index marked `is_tenant`).
+        tokenizer, or a `keyword` index marked `is_tenant`). If the field
+        already has an index with another schema, it is replaced without
+        warning (verified: integer → keyword drops its range filtering).
 
         Example: {"collection_name": "docs", "field_name": "city", "field_schema": "keyword"}
         """
