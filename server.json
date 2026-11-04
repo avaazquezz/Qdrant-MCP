@@ -1,0 +1,62 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.avaazquezz/mcp-qdrant",
+  "description": "The full Qdrant API as 56 MCP tools, plus plain-text semantic, BM25 and hybrid search.",
+  "title": "Qdrant MCP",
+  "repository": {
+    "url": "https://github.com/avaazquezz/Qdrant-MCP",
+    "source": "github"
+  },
+  "version": "2.8.0",
+  "websiteUrl": "https://mcp-qdrant.vazquezlabs.com",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "mcp-qdrant",
+      "version": "2.8.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "Qdrant server URL, e.g. http://localhost:6333 (mutually exclusive with QDRANT_LOCAL_PATH)",
+          "name": "QDRANT_URL"
+        },
+        {
+          "description": "Qdrant API key, if your instance requires one",
+          "isSecret": true,
+          "name": "QDRANT_API_KEY"
+        },
+        {
+          "description": "Path to an embedded Qdrant instance, instead of a URL",
+          "name": "QDRANT_LOCAL_PATH"
+        },
+        {
+          "description": "Comma-separated toolsets to enable: core, search, payload, admin, snapshots, observability",
+          "default": "core",
+          "name": "QDRANT_MCP_TOOLSETS"
+        },
+        {
+          "description": "Remove every tool not marked read-only from the registry",
+          "default": "false",
+          "name": "QDRANT_MCP_READ_ONLY"
+        },
+        {
+          "description": "Largest number of points one tool call may ask for (minimum 30); bigger requests are refused, not cut",
+          "default": "1000",
+          "name": "QDRANT_MCP_MAX_LIMIT"
+        },
+        {
+          "name": "QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS",
+          "description": "Comma-separated http(s) origins qdrant_snapshot_recover may restore from, besides file:// and QDRANT_URL's own origin"
+        },
+        {
+          "name": "FASTEMBED_CACHE_PATH",
+          "description": "Where text-embedding models are cached (semantic search needs the mcp-qdrant[embeddings] extra)"
+        }
+      ]
+    }
+  ]
+}
