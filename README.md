@@ -72,13 +72,18 @@ finding that shaped a decision (in Spanish).
 - **Payload & vector editing** — set/overwrite/delete/clear payload, payload indexes, facet
   counting, named (dense/sparse) vector management, ordered batch operations.
 - **Snapshots** — per-collection and full-storage backup/restore.
+- **A search advisor** — `qdrant_collection_doctor` checks a collection (status, index,
+  memory, aliases, text setup) and answers each finding with the exact tool call that fixes it;
+  `qdrant_search_quality_eval` measures recall@k of the approximate search against an exact one,
+  and latency, for any `search_params` variants — so tuning HNSW or quantization is judged by
+  numbers, e.g. "quantized without rescoring: recall 0.97; with rescoring: 1.0".
 - **Aliases, reindexing & introspection** — switch the collection a name points to without
   downtime, copy points between collections server-side (vectors never pass through the model),
   check shard layout and whether the optimizer has finished indexing, and profile the payload
   keys a collection actually has before writing a filter.
 - **Observability** — telemetry, Prometheus metrics endpoint, resource quotas, self-diagnosed
   issues.
-- **Opt-in tool surface** — the 56 tools are grouped into toolsets you enable explicitly, so a
+- **Opt-in tool surface** — the 58 tools are grouped into toolsets you enable explicitly, so a
   client isn't handed all of them by default (only the 13-tool `core` toolset is on).
 - **Read-only guard** — one flag removes every mutating tool from the registry entirely.
 - **Easy on the model's context** — the schemas the server advertises are compact (Qdrant's
@@ -278,10 +283,10 @@ tool at once:
   operations.
 - **`snapshots`** — collection and full-storage backup/restore.
 - **`observability`** — telemetry, metrics, quotas, and self-diagnosed issues.
-- **`admin`** — collection aliases, per-collection shard layout and optimizer progress, and two
-  composite operations that keep the data on the server: copying points between collections
-  (the missing half of a zero-downtime reindex) and profiling the payload keys a collection
-  really has. Everything here works on a single node; distributed-cluster administration (shard
+- **`admin`** — collection aliases, per-collection shard layout and optimizer progress,
+  composite operations that keep the data on the server (copying points between collections —
+  the missing half of a zero-downtime reindex — and profiling the payload keys a collection
+  really has), and the advisor: a collection doctor and a search-quality evaluation. Everything here works on a single node; distributed-cluster administration (shard
   keys, resharding) is out of scope — see [ROADMAP.md](ROADMAP.md), Fase 5 and Fase 12.
 
 The table below is generated directly from the live tool registry — run
@@ -332,6 +337,8 @@ The table below is generated directly from the live tool registry — run
 | `qdrant_collection_optimizations` | `admin` | ✅ | ❌ | ✅ | Progress of the background optimizer for a collection — answers "has it finished indexing?" and "why isn't the collection green?". |
 | `qdrant_collection_copy` | `admin` | ❌ | ✅ | ✅ | Copy points (all vectors — dense, sparse and multivector — and payload) from one collection to another of the same Qdrant instance, entirely server-side: the vectors never pass through the model. |
 | `qdrant_payload_schema_infer` | `admin` | ✅ | ❌ | ✅ | Profile the payload keys that actually occur in a collection, so filters can be written against real keys instead of guessed ones. |
+| `qdrant_collection_doctor` | `admin` | ✅ | ❌ | ✅ | Diagnose one collection (or alias): read-only checks that each come with the exact tool call that acts on them, so you don't have to know Qdrant's internals. |
+| `qdrant_search_quality_eval` | `admin` | ✅ | ❌ | ✅ | Measure how much a collection's approximate (HNSW, quantized) search loses against an exact one, and what each configuration costs in latency — so a tuning change is judged by numbers. |
 | `qdrant_snapshot_create` | `snapshots` | ❌ | ❌ | ❌ | Create a snapshot of one collection's current state. |
 | `qdrant_snapshot_list` | `snapshots` | ✅ | ❌ | ✅ | List the snapshots stored for one collection. |
 | `qdrant_snapshot_delete` | `snapshots` | ❌ | ✅ | ✅ | Delete a collection snapshot, freeing its disk space on the server — does not touch the live collection. |

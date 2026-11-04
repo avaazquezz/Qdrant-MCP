@@ -14,9 +14,11 @@ from mcp_qdrant.tools import admin as admin_tools
 from mcp_qdrant.tools import collections as collections_tools
 from mcp_qdrant.tools import composites as composites_tools
 from mcp_qdrant.tools import core as core_tools
+from mcp_qdrant.tools import doctor as doctor_tools
 from mcp_qdrant.tools import observability as observability_tools
 from mcp_qdrant.tools import payload as payload_tools
 from mcp_qdrant.tools import points as points_tools
+from mcp_qdrant.tools import quality as quality_tools
 from mcp_qdrant.tools import query as query_tools
 from mcp_qdrant.tools import search as search_tools
 from mcp_qdrant.tools import snapshots as snapshots_tools
@@ -42,6 +44,8 @@ _TOOL_MODULES = (
     vectors_tools,
     admin_tools,
     composites_tools,
+    doctor_tools,
+    quality_tools,
 )
 
 
