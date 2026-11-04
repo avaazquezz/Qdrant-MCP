@@ -242,7 +242,8 @@ async def test_large_unquantized_dense_vectors_get_the_int8_hint() -> None:
     assert finding.fix.tool == "qdrant_collection_update"
     assert finding.fix.arguments == {
         "collection_name": NAME,
-        "quantization_config": {"scalar": {"type": "int8", "always_ram": True}},
+        "quantization_config": {"scalar": {"type": "int8", "memory": "pinned"}},
+        "vectors_config": {"dense": {"memory": "cold"}, "small": {"memory": "cold"}},
     }
 
 
@@ -433,3 +434,10 @@ async def test_no_text_contract_is_not_checked() -> None:
     report = await _report(_info(metadata={"owner": "team-a"}))
 
     assert report.checked == ALL_RULES
+
+
+async def test_an_explicit_null_contract_is_checked_and_reports_nothing() -> None:
+    report = await _report(_info(metadata={"mcp_qdrant": None}))
+
+    assert "text_contract" in report.checked
+    assert "text_contract" not in _rules(report)

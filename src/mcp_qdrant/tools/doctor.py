@@ -100,7 +100,7 @@ def _status(name: str, info: CollectionInfo) -> DoctorFinding | None:
         )
     if info.status == CollectionStatus.GREY:
         # Qdrant's docs trigger them with exactly this empty optimizers update:
-        # https://qdrant.tech/documentation/manage-data/collections/ ("Grey Collection Status").
+        # https://qdrant.tech/documentation/concepts/collections/ ("Grey Collection Status").
         return DoctorFinding(
             rule="status",
             severity="warning",
@@ -186,9 +186,10 @@ def _memory(name: str, info: CollectionInfo) -> DoctorFinding | None:
         severity="info",
         finding=(
             f"Up to ~{total / (1 << 30):.1f} GiB of dense vectors stay in RAM unquantized. "
-            "Scalar int8 quantization keeps a copy at 1 byte per dimension (4x smaller than "
-            "float32) in RAM, at some accuracy cost you can measure with "
-            "`qdrant_search_quality_eval`."
+            "The fix keeps a scalar int8 copy (1 byte per dimension, 4x smaller than float32) "
+            "pinned in RAM and moves the originals to the cold tier: quantization alone would "
+            "only add the copy next to them (Qdrant's capacity planning). Searches then rescore "
+            "from disk — measure the recall and latency change with `qdrant_search_quality_eval`."
         ),
         evidence={
             "bytes_by_vector": by_vector,
@@ -200,7 +201,9 @@ def _memory(name: str, info: CollectionInfo) -> DoctorFinding | None:
             tool="qdrant_collection_update",
             arguments={
                 "collection_name": name,
-                "quantization_config": {"scalar": {"type": "int8", "always_ram": True}},
+                # Both verified through qdrant_collection_update on 1.20 ("" included).
+                "quantization_config": {"scalar": {"type": "int8", "memory": "pinned"}},
+                "vectors_config": {vector: {"memory": "cold"} for vector in by_vector},
             },
         ),
     )

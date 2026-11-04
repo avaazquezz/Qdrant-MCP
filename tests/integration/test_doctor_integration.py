@@ -132,7 +132,10 @@ async def test_grey_and_memory_fixes_are_accepted_as_is(env: Env) -> None:
     memory = doctor_tools._memory(env.name, info.model_copy(update={"points_count": 1 << 20}))
     assert memory is not None
     await env.apply(memory.fix)
-    assert (await env.client.get_collection(env.name)).config.quantization_config is not None
+    applied = (await env.client.get_collection(env.name)).config
+    assert applied.quantization_config is not None
+    assert isinstance(applied.params.vectors, VectorParams)
+    assert applied.params.vectors.memory == "cold"  # the originals left RAM
 
 
 async def test_text_contract_fixes_clear_their_findings(env: Env) -> None:
