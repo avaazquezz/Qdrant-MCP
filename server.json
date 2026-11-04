@@ -1,20 +1,20 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.avaazquezz/mcp-qdrant",
-  "description": "The full Qdrant API as 56 MCP tools, plus plain-text semantic, BM25 and hybrid search.",
+  "description": "The full Qdrant API as 58 MCP tools: plain-text semantic/BM25/hybrid search and a search advisor.",
   "title": "Qdrant MCP",
   "repository": {
     "url": "https://github.com/avaazquezz/Qdrant-MCP",
     "source": "github"
   },
-  "version": "2.9.0",
+  "version": "2.10.0",
   "websiteUrl": "https://mcp-qdrant.vazquezlabs.com",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "mcp-qdrant",
-      "version": "2.9.0",
+      "version": "2.10.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

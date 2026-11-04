@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-11-04
+
+A search advisor, in the `admin` toolset: Qdrant expertise the model no longer has to carry.
+
+### Added
+- **`qdrant_collection_doctor`** checks one collection (or alias) and answers each finding with
+  the exact call to another tool that acts on it: a non-green status (yellow, grey — optimizations
+  paused after a restart — or red, with the optimizer's error), no vector index yet (every search
+  scans all points), 1 GiB or more of dense vectors held in RAM unquantized per copy of the data
+  (the fix gives just those vectors an int8 copy pinned in RAM and moves their originals to the
+  cold tier — quantization alone only adds the copy),
+  no alias pointing at it (a rebuild-and-switch would need a client change), and a broken text
+  setup. Read-only: it never applies a fix.
+- **`qdrant_search_quality_eval`** measures recall@k of the approximate search against an exact
+  one, plus latency p50/p95, for up to five `search_params` variants, using points the collection
+  already holds as queries. The query point is left out without a filter, which would switch
+  Qdrant to its filtered-search path. Example on a scalar-quantized collection: recall 0.97 by
+  default, 1.0 with rescoring.
+
+An independent review before release (Fase 20b) found 9 defects, all reproduced and fixed here.
+The two that mattered most were in the doctor's memory fix: as a collection-wide quantization it
+also quantized the cold and multivector vectors the rule had left out (a pinned copy they didn't
+need, and lower recall), and for vectors already at 1 byte per dimension or less an int8 copy
+saved nothing or doubled the RAM. Also fixed: the evaluation now samples only points that have
+the named vector, counts `sample` and `limit + 1` against `QDRANT_MCP_MAX_LIMIT`, says when
+sparse vectors make the index state unknowable or a quantization variant meets an unquantized
+vector, and no longer gives contradictory notes; the memory estimate is per copy of the data.
+
 ## [2.9.0] - 2026-11-04
 
 Less context per call. Measured first in a real Claude Code session (2.1.318) against a probe

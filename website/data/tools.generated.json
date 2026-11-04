@@ -328,6 +328,22 @@
     "idempotent": true
   },
   {
+    "name": "qdrant_collection_doctor",
+    "toolset": "admin",
+    "description": "Diagnose one collection (or alias): read-only checks that each come with the exact tool call that acts on them, so you don't have to know Qdrant's internals.\n\nRules (`rule` in each finding): - `status`: the collection isn't green — yellow (optimizing), grey (optimizations paused, usually after a restart) or red (an optimization failed; the error is in `evidence`). - `unindexed`: it has points but no vector (HNSW) index yet, so searches scan every point. Collections with sparse vectors are never flagged here. - `memory`: at least 1 GiB of dense vectors held in RAM without quantization, per copy of the data (multivectors, on-disk/cold, quantized vectors and datatypes of 1 byte per dimension or less don't count). - `aliases`: no alias points to it, so a rebuild-and-switch would need a client change. - `text_contract`: only for collections that declare text search (`text_models`): a declared model on a vector that isn't a single dense vector, a text field without a BM25 index, or malformed metadata.\n\n`checked` lists the rules evaluated: always the first four, plus `text_contract` when the collection declares one. A report with no findings means none of these rules fired, not that the collection is optimally configured.\n\nEach finding has a `severity` (error, warning, info), a plain-language `finding`, the numbers it is based on (`evidence`) and, when one exists, a `fix`: a call to another tool of this server, with arguments it accepts as is — except `aliases`, whose alias name is a placeholder to choose. Nothing is applied: calling the fix is up to you, and the fix's tool may not be enabled here (read-only mode, or its toolset not loaded).\n\nExample: {\"collection_name\": \"docs\"}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
+    "name": "qdrant_search_quality_eval",
+    "toolset": "admin",
+    "description": "Measure how much a collection's approximate (HNSW, quantized) search loses against an exact one, and what each configuration costs in latency — so a tuning change is judged by numbers.\n\nTakes `sample` random points the collection already holds and uses each one's vector (the one in `using`; omit it when there's only one) as a query. For each query it runs an exact brute-force search — the ground truth — and an approximate search per `variants` entry (each a `search_params` object such as `{\"hnsw_ef\": 128}` or `{\"quantization\": {\"rescore\": true, \"oversampling\": 2.0}}`; by default one variant with the collection's own settings). The query point itself is left out of both result lists without a filter (a filter would switch Qdrant to its filtered-search path and measure that instead). Reports, per variant, recall@`limit` (mean and worst query: the share of the exact top-`limit` the approximate search also returned) and latency p50/p95.\n\nRead the numbers with care: points used as their own queries sit inside the data, so recall here is usually higher than for real queries; latency is measured by this server and includes the round trip to Qdrant. Below the indexing threshold there is no HNSW index yet and approximate search is exact, so recall is 1.0 by construction — the report says so when it can tell (with sparse vectors in the collection it can't, and says that instead). Sparse vectors are always searched exactly and are refused. `sample` and `limit + 1` count against the server's per-call result cap.\n\nExample: {\"collection_name\": \"docs\", \"variants\": [{}, {\"hnsw_ef\": 32}, {\"hnsw_ef\": 256}]}",
+    "read_only": true,
+    "destructive": false,
+    "idempotent": true
+  },
+  {
     "name": "qdrant_snapshot_create",
     "toolset": "snapshots",
     "description": "Create a snapshot of one collection's current state.\n\nExample: {\"collection_name\": \"docs\"}",

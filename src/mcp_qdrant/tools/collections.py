@@ -64,7 +64,7 @@ def _bm25_index(language: SnowballLanguage) -> TextIndexParams:
     )
 
 
-def _dense_size(info: CollectionInfo, vector_name: str) -> int | None:
+def dense_vector_size(info: CollectionInfo, vector_name: str) -> int | None:
     """Size of a single-vector dense vector ("" = the unnamed one); None if there's no such
     vector, or it's a multivector (a text model makes one vector per text)."""
     vectors = info.config.params.vectors
@@ -316,7 +316,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                     models.pop(vector_name, None)
                     continue
                 model, size = embeddings.model_info(requested)
-                actual = _dense_size(info, vector_name)
+                actual = dense_vector_size(info, vector_name)
                 if actual is None:
                     raise ToolError(
                         f"{collection_name!r} has no single dense vector named {vector_name!r} "
