@@ -35,7 +35,8 @@ useGsap(root, ({ motion }) => {
       />
 
       <div class="mt-12">
-        <ol class="relative grid grid-cols-2 gap-y-6 md:grid-cols-6">
+        <!-- One column per stop from md up, however many stops the copy lists. -->
+        <ol class="relative grid grid-cols-2 gap-y-6 md:grid-flow-col md:auto-cols-fr md:grid-cols-none">
           <span class="absolute left-0 right-0 top-[0.6rem] hidden h-px bg-ink/20 md:block" aria-hidden="true" />
           <span data-wire class="absolute left-0 right-0 top-[0.6rem] hidden h-[2px] -translate-y-px bg-spot md:block" aria-hidden="true" />
           <li v-for="(stop, i) in copy.quality.pipeline" :key="stop" data-stop class="relative">

@@ -5,6 +5,346 @@
   },
   "scenarios": [
     {
+      "id": "text-search",
+      "steps": [
+        {
+          "tool": "qdrant_collection_create",
+          "arguments": {
+            "collection_name": "demo_help",
+            "text_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+            "text_language": "english"
+          },
+          "ok": true,
+          "result": {
+            "status": "green",
+            "points_count": 0,
+            "vectors": {
+              "dense": {
+                "size": 384,
+                "distance": "Cosine"
+              }
+            },
+            "hnsw_m": 16,
+            "text": {
+              "text_field": "text",
+              "models": {
+                "dense": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+              }
+            }
+          }
+        },
+        {
+          "tool": "qdrant_points_upsert",
+          "arguments": {
+            "collection_name": "demo_help",
+            "points": [
+              {
+                "id": 1,
+                "text": "Reset your password. Forgot your password? Request a reset link by email and choose a new one.",
+                "payload": {
+                  "title": "Reset your password"
+                }
+              },
+              {
+                "id": 2,
+                "text": "Rotate API keys. Generate a new API key and revoke the old one without downtime.",
+                "payload": {
+                  "title": "Rotate API keys"
+                }
+              },
+              {
+                "id": 3,
+                "text": "Invoice and billing FAQ. Where to find your invoices, change the billing address or the payment card.",
+                "payload": {
+                  "title": "Invoice and billing FAQ"
+                }
+              },
+              {
+                "id": 4,
+                "text": "Set up single sign-on. Connect your identity provider with SAML so the team signs in with one account.",
+                "payload": {
+                  "title": "Set up single sign-on"
+                }
+              },
+              {
+                "id": 5,
+                "text": "Export your data. Download everything in your workspace as a CSV or JSON archive.",
+                "payload": {
+                  "title": "Export your data"
+                }
+              },
+              {
+                "id": 6,
+                "text": "Delete your account. Close your account and permanently erase your data.",
+                "payload": {
+                  "title": "Delete your account"
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "result": {
+            "status": "completed"
+          }
+        },
+        {
+          "tool": "qdrant_query",
+          "arguments": {
+            "collection_name": "demo_help",
+            "limit": 2,
+            "with_payload": [
+              "title"
+            ],
+            "query_text": "I can't log in, I lost my credentials"
+          },
+          "ok": true,
+          "result": {
+            "ranked": [
+              {
+                "id": 1,
+                "title": "Reset your password"
+              },
+              {
+                "id": 4,
+                "title": "Set up single sign-on"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "qdrant_query",
+          "arguments": {
+            "collection_name": "demo_help",
+            "limit": 2,
+            "with_payload": [
+              "title"
+            ],
+            "query_text": "olvidé mi contraseña"
+          },
+          "ok": true,
+          "result": {
+            "ranked": [
+              {
+                "id": 1,
+                "title": "Reset your password"
+              },
+              {
+                "id": 4,
+                "title": "Set up single sign-on"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "qdrant_query",
+          "arguments": {
+            "collection_name": "demo_help",
+            "limit": 2,
+            "with_payload": [
+              "title"
+            ],
+            "bm25_query": "invoice card"
+          },
+          "ok": true,
+          "result": {
+            "ranked": [
+              {
+                "id": 3,
+                "title": "Invoice and billing FAQ"
+              }
+            ]
+          }
+        },
+        {
+          "tool": "qdrant_query",
+          "arguments": {
+            "collection_name": "demo_help",
+            "limit": 2,
+            "with_payload": [
+              "title"
+            ],
+            "fusion": "rrf",
+            "prefetch": [
+              {
+                "query_text": "how do I sign in with my company account",
+                "limit": 6
+              },
+              {
+                "bm25_query": "account",
+                "limit": 6
+              }
+            ]
+          },
+          "ok": true,
+          "result": {
+            "ranked": [
+              {
+                "id": 4,
+                "title": "Set up single sign-on"
+              },
+              {
+                "id": 6,
+                "title": "Delete your account"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "search-advisor",
+      "steps": [
+        {
+          "tool": "qdrant_collection_create",
+          "arguments": {
+            "collection_name": "demo_tune",
+            "vector_size": 16,
+            "distance": "Cosine",
+            "quantization_config": {
+              "scalar": {
+                "type": "int8",
+                "always_ram": true
+              }
+            },
+            "hnsw_config": {
+              "max_indexing_threads": 1
+            },
+            "optimizers_config": {
+              "indexing_threshold": 1,
+              "default_segment_number": 1,
+              "max_optimization_threads": 1
+            }
+          },
+          "ok": true,
+          "result": {
+            "status": "green",
+            "points_count": 0,
+            "vectors": {
+              "size": 16,
+              "distance": "Cosine"
+            },
+            "hnsw_m": 16,
+            "quantization": {
+              "scalar": {
+                "type": "int8",
+                "quantile": null,
+                "always_ram": true,
+                "memory": null
+              }
+            }
+          }
+        },
+        {
+          "tool": "qdrant_collection_doctor",
+          "arguments": {
+            "collection_name": "demo_tune"
+          },
+          "ok": true,
+          "result": {
+            "status": "green",
+            "findings": [
+              {
+                "rule": "aliases",
+                "severity": "info",
+                "fix": {
+                  "tool": "qdrant_alias_update",
+                  "arguments": {
+                    "operations": [
+                      {
+                        "create_alias": {
+                          "collection_name": "demo_tune",
+                          "alias_name": "<name your clients will use>"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "checked": [
+              "status",
+              "unindexed",
+              "memory",
+              "aliases"
+            ]
+          }
+        },
+        {
+          "tool": "qdrant_alias_update",
+          "arguments": {
+            "operations": [
+              {
+                "create_alias": {
+                  "collection_name": "demo_tune",
+                  "alias_name": "demo_tune_live"
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "result": {
+            "applied": true
+          }
+        },
+        {
+          "tool": "qdrant_collection_doctor",
+          "arguments": {
+            "collection_name": "demo_tune"
+          },
+          "ok": true,
+          "result": {
+            "status": "green",
+            "findings": [],
+            "checked": [
+              "status",
+              "unindexed",
+              "memory",
+              "aliases"
+            ]
+          }
+        },
+        {
+          "tool": "qdrant_search_quality_eval",
+          "arguments": {
+            "collection_name": "demo_tune",
+            "sample": 200,
+            "variants": [
+              {},
+              {
+                "quantization": {
+                  "rescore": true,
+                  "oversampling": 2.0
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "result": {
+            "queries": 200,
+            "limit": 10,
+            "variants": [
+              {
+                "search_params": {},
+                "recall_mean": 0.975,
+                "recall_min": 0.9
+              },
+              {
+                "search_params": {
+                  "quantization": {
+                    "rescore": true,
+                    "oversampling": 2.0
+                  }
+                },
+                "recall_mean": 1.0,
+                "recall_min": 1.0
+              }
+            ],
+            "notes": []
+          }
+        }
+      ]
+    },
+    {
       "id": "hybrid-search",
       "steps": [
         {
