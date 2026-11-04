@@ -26,7 +26,7 @@ from mcp_qdrant.tools.query_shared import (
     build_query_value,
 )
 from mcp_qdrant.tools.registry import ToolRegistry
-from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput
+from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput, WithPayloadInput
 from mcp_qdrant.tools.text_shared import TextResolver
 
 _QUERY_ANNOTATIONS = ToolAnnotations(
@@ -57,7 +57,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         offset: OffsetInput | None = None,
-        with_payload: bool = True,
+        with_payload: WithPayloadInput = True,
         with_vectors: bool = False,
         timeout_seconds: TimeoutSeconds | None = None,
         consistency: ConsistencyInput | None = None,
@@ -116,6 +116,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         so pipelines nest: fuse semantic + BM25 in one stage, then rerank. `using` selects a named
         vector; `lookup_from` resolves `query_vector` from a point id in
         another collection.
+
+        Results: `with_payload` takes `true`/`false` or a list of keys to return
+        only those (e.g. `["title", "url"]`, nested ones as `"meta.author"`) —
+        most of what you read back is payload.
 
         Tuning: `search_params` (`hnsw_ef`, `exact` for brute force,
         `quantization`: `ignore`/`rescore`/`oversampling`, `indexed_only`,
