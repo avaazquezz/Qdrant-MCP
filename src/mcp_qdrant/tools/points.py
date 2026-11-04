@@ -22,7 +22,7 @@ from mcp_qdrant import embeddings
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector, page_offset
 from mcp_qdrant.tools.registry import ToolRegistry
-from mcp_qdrant.tools.schemas import FilterInput, StrictInput
+from mcp_qdrant.tools.schemas import FilterInput, StrictInput, WithPayloadInput
 from mcp_qdrant.tools.text_shared import contract_from_metadata
 
 _UPSERT_ANNOTATIONS = ToolAnnotations(
@@ -200,14 +200,15 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     async def qdrant_points_get(
         collection_name: str,
         ids: Annotated[list[int | str], Field(min_length=1)],
-        with_payload: bool = True,
+        with_payload: WithPayloadInput = True,
         with_vectors: bool = False,
     ) -> PointsGetResult:
         """Retrieve points by id; unknown ids are simply omitted, not an error.
 
-        Fails only if the collection itself doesn't exist.
+        Fails only if the collection itself doesn't exist. `with_payload` takes
+        `true`/`false` or a list of keys to return only those (e.g. `["title"]`).
 
-        Example: {"collection_name": "docs", "ids": [1, 2]}
+        Example: {"collection_name": "docs", "ids": [1, 2], "with_payload": ["title", "url"]}
         """
         registry.check_limit(len(ids), "the number of ids")
         records = await call_qdrant(
@@ -241,7 +242,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         scroll_filter: FilterInput | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         offset: int | str | None = None,
-        with_payload: bool = True,
+        with_payload: WithPayloadInput = True,
         with_vectors: bool = False,
         order_by: OrderBy | str | None = None,
     ) -> PointsScrollResult:
@@ -249,7 +250,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
 
         Pass the returned `next_page_offset` as `offset` to fetch the next
         page; `null` means there are no more pages. `limit` is capped per call
-        by the server's QDRANT_MCP_MAX_LIMIT (1000 by default).
+        by the server's QDRANT_MCP_MAX_LIMIT (1000 by default). `with_payload`
+        takes `true`/`false` or a list of keys to return only those.
 
         `order_by` sorts by a payload field instead of by id: a key, or
         `{"key": ..., "direction": "asc"|"desc", "start_from": value}`; the key

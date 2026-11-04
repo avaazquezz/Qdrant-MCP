@@ -1,5 +1,5 @@
 {
-  "version": "2.8.0",
+  "version": "2.9.0",
   "tools": 56,
   "toolsets": {
     "core": 13,
@@ -11,10 +11,14 @@
   },
   "read_only_tools": 31,
   "destructive_tools": 19,
-  "tests": 644,
+  "tests": 652,
   "core_schema_kb": 48,
-  "catalog_schema_kb": 179,
+  "catalog_schema_kb": 176,
   "releases": [
+    {
+      "version": "2.9.0",
+      "date": "2026-11-04"
+    },
     {
       "version": "2.8.0",
       "date": "2026-11-04"
@@ -96,6 +100,6 @@
       "date": "2026-08-30"
     }
   ],
-  "source_lines": 3995,
-  "test_lines": 6738
+  "source_lines": 4011,
+  "test_lines": 6845
 }

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, WithJsonSchema
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, WithJsonSchema
 from qdrant_client.http.models import (
     BinaryQuantization,
     CollectionParamsDiff,
@@ -42,6 +42,15 @@ from qdrant_client.http.models import (
 )
 
 
+def _drop_generated_titles(schema: dict[str, Any]) -> None:
+    """Pydantic titles every model and field after its own name ("query_vector" → "Query
+    Vector"): nothing a model can't already read from the key, ~12 KB across the catalog's
+    input schemas. Validation doesn't use titles."""
+    schema.pop("title", None)
+    for field in schema.get("properties", {}).values():
+        field.pop("title", None)
+
+
 class StrictInput(BaseModel):
     """Base for the nested input models of tool parameters. Pydantic ignores unknown
     keys by default, which here means a misspelled or mis-named key silently does
@@ -49,7 +58,7 @@ class StrictInput(BaseModel):
     `query_filter`) returned unfiltered results, and `{"mmr": {"candidate_limit": 5}}`
     ran MMR with its defaults. Forbidding extras turns those into a clear error."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra=_drop_generated_titles)
 
 
 # --- generated: strip prose, keep structure -----------------------------------------
@@ -238,6 +247,10 @@ _BATCH_OPERATIONS_SCHEMA: dict[str, Any] = {
 
 FilterInput = Annotated[Filter, WithJsonSchema(_FILTER_SCHEMA)]
 SearchParamsInput = Annotated[SearchParams, WithJsonSchema(_SEARCH_PARAMS_SCHEMA)]
+# `true`/`false`, or only these payload keys — what a model reads of a result is mostly payload.
+# Nested keys (`a.b`) come back in their structure and a key a point lacks is just absent
+# (verified). An empty list would mean `false`, so it's refused as ambiguous.
+WithPayloadInput = bool | Annotated[list[str], Field(min_length=1)]
 BatchOperationsSchema = WithJsonSchema(_BATCH_OPERATIONS_SCHEMA)
 
 # --- configuration models ------------------------------------------------------------

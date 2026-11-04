@@ -83,8 +83,10 @@ finding that shaped a decision (in Spanish).
 - **Read-only guard** — one flag removes every mutating tool from the registry entirely.
 - **Easy on the model's context** — the schemas the server advertises are compact (Qdrant's
   verbose `Filter` and configuration models are summarized, validation unchanged), so the
-  default toolset costs ~44 KB of schema instead of ~150 KB, and a per-call result cap
-  (`QDRANT_MCP_MAX_LIMIT`) stops one mistaken `limit` from flooding the conversation.
+  default toolset costs ~47 KB of schema instead of ~150 KB; `with_payload` can name just the
+  keys to return (`["title", "url"]`), since payload is most of what a model reads back; and a
+  per-call result cap (`QDRANT_MCP_MAX_LIMIT`) stops one mistaken `limit` from flooding the
+  conversation.
 - **Resilient by default** — every Qdrant call goes through retry-with-backoff and returns
   Qdrant's own error message on failure, never a generic exception.
 

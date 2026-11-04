@@ -49,7 +49,7 @@ from mcp_qdrant.tools.query_shared import (
     build_query_value,
 )
 from mcp_qdrant.tools.registry import ToolRegistry
-from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput, StrictInput
+from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput, StrictInput, WithPayloadInput
 from mcp_qdrant.tools.text_shared import TextResolver
 
 RecommendStrategyName = Literal["average_vector", "best_score", "sum_scores"]
@@ -146,7 +146,7 @@ class QuerySpec(StrictInput):
     score_threshold: float | None = None
     limit: Annotated[int, Field(gt=0)] = 10
     offset: OffsetInput | None = None
-    with_payload: bool = True
+    with_payload: WithPayloadInput = True
     with_vectors: bool = False
 
     def to_request(self) -> QueryRequest:
@@ -194,7 +194,7 @@ class RecommendSpec(StrictInput):
     score_threshold: float | None = None
     limit: Annotated[int, Field(gt=0)] = 10
     offset: OffsetInput | None = None
-    with_payload: bool = True
+    with_payload: WithPayloadInput = True
     with_vectors: bool = False
 
     def to_request(self) -> QueryRequest:
@@ -227,7 +227,7 @@ class DiscoverSpec(StrictInput):
     score_threshold: float | None = None
     limit: Annotated[int, Field(gt=0)] = 10
     offset: OffsetInput | None = None
-    with_payload: bool = True
+    with_payload: WithPayloadInput = True
     with_vectors: bool = False
 
     def to_request(self) -> QueryRequest:
@@ -327,7 +327,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         group_size: Annotated[int, Field(gt=0)] = 3,
-        with_payload: bool = True,
+        with_payload: WithPayloadInput = True,
         with_vectors: bool = False,
         with_lookup: str | None = None,
         timeout_seconds: TimeoutSeconds | None = None,
@@ -388,7 +388,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         offset: OffsetInput | None = None,
-        with_payload: bool = True,
+        with_payload: WithPayloadInput = True,
         with_vectors: bool = False,
         timeout_seconds: TimeoutSeconds | None = None,
         consistency: ConsistencyInput | None = None,
@@ -472,7 +472,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         group_size: Annotated[int, Field(gt=0)] = 3,
-        with_payload: bool = True,
+        with_payload: WithPayloadInput = True,
         with_vectors: bool = False,
         with_lookup: str | None = None,
         timeout_seconds: TimeoutSeconds | None = None,
@@ -520,7 +520,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         score_threshold: float | None = None,
         limit: Annotated[int, Field(gt=0)] = 10,
         offset: OffsetInput | None = None,
-        with_payload: bool = True,
+        with_payload: WithPayloadInput = True,
         with_vectors: bool = False,
         timeout_seconds: TimeoutSeconds | None = None,
         consistency: ConsistencyInput | None = None,

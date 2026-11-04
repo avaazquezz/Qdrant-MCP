@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-11-04
+
+Less context per call. Measured first in a real Claude Code session (2.1.318) against a probe
+server with a different marker in each channel: the model reads a tool's `structuredContent`
+(compact JSON), never its text `content`, and the advertised `outputSchema` doesn't reach it at
+all. So the planned compaction of the text channel was dropped — it would save nothing — and so
+was a server-side size cap: Claude Code already turns an oversized result into a clear notice and
+a file the model can query. What a model reads back is mostly payload; that is what this targets.
+
+### Added
+- `with_payload` takes a list of payload keys to return only those (e.g. `["title", "url"]`,
+  nested keys as `"meta.author"`), in `qdrant_query`, `_batch`, `_groups`, `qdrant_points_get`,
+  `qdrant_points_scroll`, and the recommend/discover tools. `true`/`false` work as before.
+
+### Changed
+- The input schemas no longer carry the `title` Pydantic generates for every nested input model
+  and field ("Query Vector" for `query_vector`): 158 of them, ~4 KB off the catalog
+  (180 → 176 KB). Validation is unchanged.
+
 ## [2.8.0] - 2026-11-04
 
 Text search: a model can now search a collection with a plain-text question and store plain text,

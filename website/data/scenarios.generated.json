@@ -1,6 +1,6 @@
 {
   "recorded_with": {
-    "mcp_qdrant": "2.8.0",
+    "mcp_qdrant": "2.9.0",
     "qdrant": "1.20.0"
   },
   "scenarios": [
