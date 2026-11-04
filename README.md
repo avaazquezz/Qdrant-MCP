@@ -27,6 +27,7 @@ vector editing, snapshots, and server observability. Not just `store`/`find`.
   - [Claude Desktop / Claude Code (local, stdio)](#claude-desktop--claude-code-local-stdio)
   - [Remote (streamable-http)](#remote-streamable-http)
 - [Text Search](#text-search)
+- [Prompts](#prompts)
 - [Configuration Reference](#configuration-reference)
 - [Available Tools](#available-tools)
 - [Read-Only Mode](#read-only-mode)
@@ -77,6 +78,11 @@ finding that shaped a decision (in Spanish).
   `qdrant_search_quality_eval` measures recall@k of the approximate search against an exact one,
   and latency, for any `search_params` variants — so tuning HNSW or quantization is judged by
   numbers, e.g. "quantized without rescoring: recall 0.97; with rescoring: 1.0".
+- **Guided workflows** — MCP prompts that walk a model through a whole task: tune a
+  collection's search (diagnose, measure, propose, wait for approval), rebuild a collection
+  without downtime, or add text search to an existing collection. In Claude Code they're slash
+  commands, e.g. `/mcp__qdrant__tune_search docs`. The server also hands the model a short
+  orientation (its MCP `instructions`), built from the toolsets you enabled.
 - **Aliases, reindexing & introspection** — switch the collection a name points to without
   downtime, copy points between collections server-side (vectors never pass through the model),
   check shard layout and whether the optimizer has finished indexing, and profile the payload
@@ -246,6 +252,19 @@ Semantic search needs the `embeddings` extra (the Docker image and the `.mcpb` b
 BM25 needs Qdrant 1.20 but no extra. Models are downloaded on first use into
 `FASTEMBED_CACHE_PATH` — set it to a persistent directory (the Docker image uses `/models`, so
 mount a volume there) to download once.
+
+## Prompts
+
+Guided workflows the user starts; each is offered only when the tools it uses are enabled and the
+server isn't read-only. In Claude Code they're slash commands with positional arguments.
+
+| Prompt | Arguments | Needs toolsets | What it does |
+|---|---|---|---|
+| `tune_search` | `collection` | `core`, `admin` | Doctor, then recall/latency for a few `search_params` variants, then the smallest change with its numbers — and waits for your approval. |
+| `zero_downtime_reindex` | `collection`, `alias` | `core`, `admin` | New collection with the settings you choose, copy, compare counts, measure, switch the alias; the old collection is kept. |
+| `text_search_setup` | `collection`, `language` | `core`, `payload` | Find the text field, declare the embedding model you name (never guessed), add a BM25 index for the language, try semantic, keyword and hybrid queries. |
+
+Example: `/mcp__qdrant__tune_search docs`.
 
 ## Configuration Reference
 

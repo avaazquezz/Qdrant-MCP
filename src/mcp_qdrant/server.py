@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from mcp.server import MCPServer
 
-from mcp_qdrant import __version__
+from mcp_qdrant import __version__, guidance
 from mcp_qdrant.config import Settings
 from mcp_qdrant.qdrant_client import build_qdrant_client
 from mcp_qdrant.tools import admin as admin_tools
@@ -61,7 +61,12 @@ def build_server(settings: Settings | None = None) -> MCPServer[None]:
         finally:
             await client.close()
 
-    server: MCPServer[None] = MCPServer(name=SERVER_NAME, version=__version__, lifespan=lifespan)
+    server: MCPServer[None] = MCPServer(
+        name=SERVER_NAME,
+        version=__version__,
+        lifespan=lifespan,
+        instructions=guidance.instructions(settings),
+    )
     registry = ToolRegistry(
         server,
         enabled_toolsets=settings.toolsets,
@@ -74,4 +79,5 @@ def build_server(settings: Settings | None = None) -> MCPServer[None]:
         registry, client, settings.qdrant_url, settings.snapshot_allowed_origins
     )
     observability_tools.register(registry, client, settings.qdrant_url)
+    guidance.register_prompts(server, settings)
     return server
