@@ -779,6 +779,25 @@ reproducido por mí). 14 defectos, ninguno alto; los que más importaban eran si
   mal formados aceptados en `create`, y `query_text` anunciado pero rechazado en el prefetch de
   recommend/discover (ahora se resuelve).
 
+### Fase 19 — `feat/context-diet` → v2.9.0
+**Primero medir.** Un servidor MCP de prueba devuelve un marcador distinto en `content` (texto) y en
+`structuredContent`, y un campo que solo nombra su `outputSchema`; una sesión real de Claude Code
+(`claude -p`, 2.1.318, `--strict-mcp-config`) cuenta qué recibió:
+- El modelo lee **`structuredContent`** (JSON compacto); el texto indentado nunca le llega. Compactar
+  el texto no ahorraría nada: **descartado**.
+- El **`outputSchema` no entra en el contexto** (el modelo no conocía el campo antes de llamar). Cierra
+  el `[SIN VERIFICAR]` de la Fase 15: esos 301 KB no cuestan contexto en Claude Code.
+- Una respuesta de 232 K caracteres no se trunca en silencio: Claude Code la sustituye por un aviso
+  explícito, la guarda en un fichero y sugiere `jq`. Un tope de tamaño en el servidor sería peor
+  (quitaría esa salida): **descartado**.
+
+Lo que queda, y lo que de verdad reduce lo que lee el modelo:
+- `with_payload` acepta una lista de claves en las 10 tools que devuelven puntos. Verificado en vivo:
+  las claves anidadas (`meta.author`) vuelven en su estructura y una clave ausente simplemente no
+  aparece; `[]` se rechaza por ambiguo (equivale a `false`).
+- Para que quepa sin subir presupuestos: fuera los `title` que Pydantic genera en los modelos de
+  entrada propios (158 campos): catálogo 180,2 → 175,9 KB, `qdrant_query_batch` 15.030 → 14.230 B.
+
 ## Versionado
 
 | Versión | Fase cerrada |
@@ -803,6 +822,7 @@ reproducido por mí). 14 defectos, ninguno alto; los que más importaban eran si
 | v2.7.0 | 17 — robustez, seguridad y Qdrant 1.20 |
 | v2.7.1 | 17b — auditoría de las descripciones anteriores a la Fase 12 |
 | v2.8.0 | 18 — búsqueda por texto (semántica, BM25, híbrida) |
+| v2.9.0 | 19 — menos contexto: selección de claves del payload |
 
 ---
 *Catálogo de endpoints verificado contra `api.qdrant.tech/master/llms.txt` y el README de
