@@ -43,3 +43,17 @@ async def test_correct_secret_passes_through() -> None:
         response = await client.get("/mcp", headers={"Authorization": "Bearer s3cr3t"})
     assert response.status_code == 200
     assert response.text == "ok"
+
+
+async def test_non_ascii_authorization_header_returns_401_not_500() -> None:
+    async with await _client(_build_app("s3cr3t")) as client:
+        response = await client.get("/mcp", headers={b"Authorization": "Bearer ñ".encode()})
+    assert response.status_code == 401
+
+
+async def test_non_ascii_secret_sent_as_utf8_passes_through() -> None:
+    async with await _client(_build_app("contraseña")) as client:
+        response = await client.get(
+            "/mcp", headers={b"Authorization": "Bearer contraseña".encode()}
+        )
+    assert response.status_code == 200
