@@ -823,6 +823,20 @@ Lo que queda, y lo que de verdad reduce lo que lee el modelo:
   cuantización o con `rescore` + `oversampling` 2.0: 1,0. `hnsw_ef` no cambiaba nada ahí: la
   pérdida venía de la cuantización, no del grafo.
 
+**20b — revisión independiente antes del tag** (cada hallazgo reproducido por mí). 9 defectos:
+- **La fix de `memory` cuantizaba toda la colección**: también los vectores cold y multivector que la
+  regla excluía (copia pinned innecesaria y recall de 1,0 a 0,95/0,917 en ellos). Ahora es por
+  vector, dentro de `vectors_config` (verificado: solo se cuantiza el vector señalado).
+- Para tipos de 1 byte por dimensión o menos (`uint8`, `turbo8`, `turbo4`) una copia int8 no ahorra o
+  duplica: se excluyen. El tamaño es por copia de los datos (multiplicar por `replication_factor`
+  inflaba la cifra en un nodo único, donde la segunda réplica no existe).
+- La evaluación muestreaba sin mirar si el punto tenía el vector con nombre (4 de 10 ejecuciones
+  fallaban con un vector en 5 de 200 puntos): ahora filtra con `has_vector`. Además: respeta
+  `QDRANT_MCP_MAX_LIMIT` por petición, avisa cuando los sparse impiden saber si hay índice o una
+  variante pide cuantización a un vector sin ella, y no da notas contradictorias.
+- Documentado: la fix del doctor puede apuntar a una tool no habilitada (modo solo lectura o toolset
+  sin cargar).
+
 ## Versionado
 
 | Versión | Fase cerrada |

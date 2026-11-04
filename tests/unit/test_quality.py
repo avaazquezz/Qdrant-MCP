@@ -118,10 +118,11 @@ async def test_each_variant_is_measured_against_the_same_truth() -> None:
 
 
 async def test_recall_is_null_when_there_is_nothing_else_to_find() -> None:
-    mock = _client(_info(UNNAMED), exact=[0], approx=[0])
+    mock = _client(_info(UNNAMED, indexed=0), exact=[0], approx=[0])
     report = await _report(mock)
     assert report.variants[0].recall_mean is None
-    assert any("recall is undefined" in note for note in report.notes)
+    # Only that note: "1.0 by construction" next to a null recall contradicted it (20b review).
+    assert report.notes == ["The collection has no other points to find: recall is undefined."]
 
 
 async def test_an_unindexed_collection_says_recall_is_exact_by_construction() -> None:
@@ -136,6 +137,9 @@ async def test_the_only_named_vector_is_picked_and_sampled_by_name() -> None:
     async def query_points(collection: str, **kwargs: Any) -> QueryResponse:
         if kwargs.get("search_params") is None:
             assert kwargs["with_vectors"] == ["dense"]
+            # Only points that have the named vector are sampled (20b review).
+            [condition] = kwargs["query_filter"].must
+            assert condition.has_vector == "dense"
             return QueryResponse(
                 points=[ScoredPoint(id=0, version=1, score=0.0, vector={"dense": [1.0, 0.0]})]
             )
@@ -189,3 +193,36 @@ async def test_an_explicit_vector_is_used_among_several() -> None:
 
     mock.query_points.side_effect = query_points
     assert (await _report(mock, using="b")).using == "b"
+
+
+async def test_with_sparse_vectors_the_index_state_is_said_to_be_unknowable() -> None:
+    info = _info({"d": UNNAMED}, sparse={"s": SparseVectorParams()}, indexed=50)
+    report = await _report(_client(info, exact=[0, 1], approx=[0, 1]), using="d")
+    assert any("also counts this collection's sparse vectors" in note for note in report.notes)
+
+
+async def test_a_quantization_variant_on_an_unquantized_vector_is_flagged() -> None:
+    mock = _client(_info(UNNAMED), exact=[0, 1], approx=[0, 1])
+    report = await _report(mock, variants=[{}, {"quantization": {"rescore": False}}])
+    assert report.notes == [
+        "Variant 1 sets `quantization`, but this vector isn't quantized: it measures plain HNSW."
+    ]
+
+
+async def test_a_sparse_only_collection_has_nothing_to_evaluate() -> None:
+    mock = _client(_info(None, sparse={"s": SparseVectorParams()}), exact=[], approx=[])
+    with pytest.raises(ToolError, match="has no dense vectors to evaluate"):
+        await _server(mock).call_tool("qdrant_search_quality_eval", {"collection_name": "docs"})
+
+
+@pytest.mark.parametrize(
+    ("args", "what"), [({"sample": 31}, "sample is 31"), ({"limit": 30}, "limit \\+ 1")]
+)
+async def test_each_request_respects_the_result_cap(args: dict[str, Any], what: str) -> None:
+    mock = _client(_info(UNNAMED), exact=[0, 1], approx=[0, 1])
+    server: MCPServer[None] = MCPServer(name="test-server")
+    registry = ToolRegistry(server, enabled_toolsets=("admin",), read_only=False, max_limit=30)
+    quality.register(registry, cast(AsyncQdrantClient, mock))
+    with pytest.raises(ToolError, match=what):
+        await server.call_tool("qdrant_search_quality_eval", {"collection_name": "docs", **args})
+    mock.get_collection.assert_not_called()

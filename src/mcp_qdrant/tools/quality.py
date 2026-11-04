@@ -21,6 +21,8 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import (
     CollectionInfo,
     ExtendedPointId,
+    Filter,
+    HasVectorCondition,
     Sample,
     SampleQuery,
     SearchParams,
@@ -77,6 +79,8 @@ def _pick_vector(info: CollectionInfo, using: str | None, collection: str) -> st
             raise ToolError(f"{collection!r} has a single unnamed vector; omit `using`.")
         return ""
     names = sorted(vectors or {})
+    if not names:
+        raise ToolError(f"{collection!r} has no dense vectors to evaluate.")
     if using is not None:
         if using not in names:
             raise ToolError(f"{collection!r} has no dense vector {using!r}; it has {names}.")
@@ -84,6 +88,13 @@ def _pick_vector(info: CollectionInfo, using: str | None, collection: str) -> st
     if len(names) == 1:
         return names[0]
     raise ToolError(f"{collection!r} has several vectors ({names}): set `using` to one.")
+
+
+def _is_quantized(info: CollectionInfo, vector_name: str) -> bool:
+    vectors = info.config.params.vectors
+    params = vectors if isinstance(vectors, VectorParams) else (vectors or {}).get(vector_name)
+    own = params.quantization_config if params is not None else None
+    return own is not None or info.config.quantization_config is not None
 
 
 def _p95(values: list[float]) -> float:
@@ -122,11 +133,16 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Read the numbers with care: points used as their own queries sit inside the data, so
         recall here is usually higher than for real queries; latency is measured by this
         server and includes the round trip to Qdrant. Below the indexing threshold there is no
-        HNSW index yet and approximate search is exact, so recall is 1.0 by construction (the
-        report says so). Sparse vectors are always searched exactly and are refused.
+        HNSW index yet and approximate search is exact, so recall is 1.0 by construction — the
+        report says so when it can tell (with sparse vectors in the collection it can't, and
+        says that instead). Sparse vectors are always searched exactly and are refused.
+        `sample` and `limit + 1` count against the server's per-call result cap.
 
         Example: {"collection_name": "docs", "variants": [{}, {"hnsw_ef": 32}, {"hnsw_ef": 256}]}
         """
+        # Each request asks Qdrant for `sample` points, then `limit + 1` hits per search.
+        registry.check_limit(sample, "sample")
+        registry.check_limit(limit + 1, "limit + 1 (the query point is dropped from it)")
         info = await call_qdrant(lambda: client.get_collection(collection_name))
         vector_name = _pick_vector(info, using, collection_name)
         qdrant_using = vector_name or None
@@ -138,6 +154,14 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 query=SampleQuery(sample=Sample.RANDOM),
                 using=qdrant_using,
                 limit=sample,
+                # A named vector is optional per point: sample only points that have it, or a
+                # rarely-present vector yields few or no queries (verified: 4 of 10 runs failed
+                # for a vector on 5 of 200 points).
+                query_filter=(
+                    Filter(must=[HasVectorCondition(has_vector=vector_name)])
+                    if vector_name
+                    else None
+                ),
                 with_payload=False,
                 with_vectors=[vector_name] if vector_name else True,
             )
@@ -183,13 +207,26 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                     recalls[index].append(len(set(found) & set(truth)) / len(truth))
 
         notes = []
-        if not info.indexed_vectors_count:
+        if not recalls[0]:
+            notes.append("The collection has no other points to find: recall is undefined.")
+        elif not info.indexed_vectors_count:
             notes.append(
                 "No vector index is built yet (indexed_vectors_count is 0): approximate search "
                 "is exact here, so recall is 1.0 by construction."
             )
-        if not recalls[0]:
-            notes.append("The collection has no other points to find: recall is undefined.")
+        elif info.config.params.sparse_vectors:
+            notes.append(
+                "indexed_vectors_count also counts this collection's sparse vectors, so whether "
+                "this vector has an HNSW index yet can't be told: a recall of exactly 1.0 may "
+                "just mean it hasn't (and approximate search is exact)."
+            )
+        if not _is_quantized(info, vector_name):
+            for index, params in enumerate(params_list):
+                if params.quantization is not None:
+                    notes.append(
+                        f"Variant {index} sets `quantization`, but this vector isn't quantized: "
+                        "it measures plain HNSW."
+                    )
         exact_p50, exact_p95 = _ms(exact_times)
         return SearchQualityReport(
             collection=collection_name,

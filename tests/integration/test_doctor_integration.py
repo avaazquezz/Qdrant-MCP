@@ -133,9 +133,10 @@ async def test_grey_and_memory_fixes_are_accepted_as_is(env: Env) -> None:
     assert memory is not None
     await env.apply(memory.fix)
     applied = (await env.client.get_collection(env.name)).config
-    assert applied.quantization_config is not None
+    assert applied.quantization_config is None  # per vector, not collection-wide
     assert isinstance(applied.params.vectors, VectorParams)
     assert applied.params.vectors.memory == "cold"  # the originals left RAM
+    assert applied.params.vectors.quantization_config is not None
 
 
 async def test_text_contract_fixes_clear_their_findings(env: Env) -> None:

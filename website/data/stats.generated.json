@@ -11,7 +11,7 @@
   },
   "read_only_tools": 33,
   "destructive_tools": 19,
-  "tests": 703,
+  "tests": 711,
   "core_schema_kb": 48,
   "catalog_schema_kb": 178,
   "releases": [
@@ -104,6 +104,6 @@
       "date": "2026-08-30"
     }
   ],
-  "source_lines": 4536,
-  "test_lines": 7561
+  "source_lines": 4586,
+  "test_lines": 7616
 }

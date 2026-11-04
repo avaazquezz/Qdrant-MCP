@@ -163,21 +163,25 @@ def _unindexed(info: CollectionInfo) -> DoctorFinding | None:
 
 def _memory(name: str, info: CollectionInfo) -> DoctorFinding | None:
     """Dense vectors held in RAM unquantized, sized as in Qdrant's capacity planning:
-    points x replication_factor x dimensions x bytes per dimension, per vector."""
+    points x dimensions x bytes per dimension, per vector — for one copy of the data."""
     if info.config.quantization_config is not None:
         return None
     points = info.points_count or 0
-    replicas = info.config.params.replication_factor or 1
     by_vector: dict[str, int] = {}
     for vector_name, params in _dense_vectors(info).items():
         # `memory` overrides the deprecated `on_disk` when both are set (Qdrant's API schema).
         tier = params.memory or (Memory.COLD if params.on_disk else Memory.CACHED)
-        # A multivector's size depends on its tokens per point, which the config doesn't say.
-        if params.multivector_config or params.quantization_config or tier == Memory.COLD:
+        bytes_per_dim = _BYTES_PER_DIM[params.datatype]
+        # A multivector's size depends on its tokens per point, which the config doesn't say;
+        # at 1 byte per dimension or less an int8 copy saves nothing (turbo4 would double).
+        if (
+            params.multivector_config
+            or params.quantization_config
+            or tier == Memory.COLD
+            or bytes_per_dim <= 1
+        ):
             continue
-        by_vector[vector_name] = int(
-            points * replicas * params.size * _BYTES_PER_DIM[params.datatype]
-        )
+        by_vector[vector_name] = int(points * params.size * bytes_per_dim)
     total = sum(by_vector.values())
     if total < MEMORY_HINT_BYTES:
         return None
@@ -185,25 +189,34 @@ def _memory(name: str, info: CollectionInfo) -> DoctorFinding | None:
         rule="memory",
         severity="info",
         finding=(
-            f"Up to ~{total / (1 << 30):.1f} GiB of dense vectors stay in RAM unquantized. "
-            "The fix keeps a scalar int8 copy (1 byte per dimension, 4x smaller than float32) "
-            "pinned in RAM and moves the originals to the cold tier: quantization alone would "
-            "only add the copy next to them (Qdrant's capacity planning). Searches then rescore "
-            "from disk — measure the recall and latency change with `qdrant_search_quality_eval`."
+            f"Up to ~{total / (1 << 30):.1f} GiB of dense vectors stay in RAM unquantized (per "
+            "copy of the data; each replica holds one). The fix gives each of these vectors — "
+            "and only these — a scalar int8 copy (1 byte per dimension) pinned in RAM and moves "
+            "its originals to the cold tier: quantization alone would only add the copy next to "
+            "them (Qdrant's capacity planning). Searches then rescore from disk — measure the "
+            "recall and latency change with `qdrant_search_quality_eval`."
         ),
         evidence={
             "bytes_by_vector": by_vector,
             "total_bytes": total,
             "points_count": points,
-            "replication_factor": replicas,
+            "replication_factor": info.config.params.replication_factor or 1,
         },
         fix=DoctorFix(
             tool="qdrant_collection_update",
             arguments={
                 "collection_name": name,
-                # Both verified through qdrant_collection_update on 1.20 ("" included).
-                "quantization_config": {"scalar": {"type": "int8", "memory": "pinned"}},
-                "vectors_config": {vector: {"memory": "cold"} for vector in by_vector},
+                # Per vector, not collection-wide: a collection-level quantization_config would
+                # also quantize the cold and multivector vectors this rule leaves out, adding a
+                # pinned copy and losing recall on them (found by the 20b review, reproduced).
+                # Verified through qdrant_collection_update on 1.20, "" included.
+                "vectors_config": {
+                    vector: {
+                        "memory": "cold",
+                        "quantization_config": {"scalar": {"type": "int8", "memory": "pinned"}},
+                    }
+                    for vector in by_vector
+                },
             },
         ),
     )
@@ -323,8 +336,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
           `evidence`).
         - `unindexed`: it has points but no vector (HNSW) index yet, so searches scan every
           point. Collections with sparse vectors are never flagged here.
-        - `memory`: at least 1 GiB of dense vectors held in RAM without quantization
-          (multivectors, on-disk/cold and quantized vectors don't count).
+        - `memory`: at least 1 GiB of dense vectors held in RAM without quantization, per
+          copy of the data (multivectors, on-disk/cold, quantized vectors and datatypes of 1
+          byte per dimension or less don't count).
         - `aliases`: no alias points to it, so a rebuild-and-switch would need a client change.
         - `text_contract`: only for collections that declare text search (`text_models`): a
           declared model on a vector that isn't a single dense vector, a text field without a
@@ -337,7 +351,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Each finding has a `severity` (error, warning, info), a plain-language `finding`, the
         numbers it is based on (`evidence`) and, when one exists, a `fix`: a call to another
         tool of this server, with arguments it accepts as is — except `aliases`, whose alias
-        name is a placeholder to choose. Nothing is applied: calling the fix is up to you.
+        name is a placeholder to choose. Nothing is applied: calling the fix is up to you, and
+        the fix's tool may not be enabled here (read-only mode, or its toolset not loaded).
 
         Example: {"collection_name": "docs"}
         """

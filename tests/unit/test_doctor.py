@@ -240,21 +240,50 @@ async def test_large_unquantized_dense_vectors_get_the_int8_hint() -> None:
     assert "qdrant_search_quality_eval" in finding.finding
     assert finding.fix is not None
     assert finding.fix.tool == "qdrant_collection_update"
+    # Per vector, never collection-wide: that would also quantize the vectors left out.
+    pinned_int8 = {"scalar": {"type": "int8", "memory": "pinned"}}
     assert finding.fix.arguments == {
         "collection_name": NAME,
-        "quantization_config": {"scalar": {"type": "int8", "memory": "pinned"}},
-        "vectors_config": {"dense": {"memory": "cold"}, "small": {"memory": "cold"}},
+        "vectors_config": {
+            "dense": {"memory": "cold", "quantization_config": pinned_int8},
+            "small": {"memory": "cold", "quantization_config": pinned_int8},
+        },
     }
 
 
-async def test_memory_counts_replicas_and_datatype() -> None:
-    # 2 replicas x 256 dims x 2 bytes (float16) = 1 KiB per point: exactly the threshold.
+async def test_the_memory_fix_leaves_out_the_vectors_the_rule_left_out() -> None:
+    multi = MultiVectorConfig(comparator=MultiVectorComparator.MAX_SIM)
+    vectors = {
+        "big": _vec(256),
+        "cold": _vec(256, memory=Memory.COLD),
+        "multi": _vec(256, multivector_config=multi),
+    }
+    [finding] = (await _report(_info(points=BIG, indexed=BIG, vectors=vectors))).findings
+
+    assert finding.fix is not None
+    assert set(finding.fix.arguments["vectors_config"]) == {"big"}
+    assert "quantization_config" not in finding.fix.arguments
+
+
+async def test_memory_counts_one_copy_of_the_data_and_the_datatype() -> None:
+    # 256 dims x 2 bytes (float16) = half the threshold per copy; a replication factor of 2
+    # doesn't double it — on a single node that second replica doesn't even exist (20b review).
     info = _info(
-        points=BIG, indexed=BIG, vectors=_vec(256, datatype=Datatype.FLOAT16), replication_factor=2
+        points=2 * BIG,
+        indexed=BIG,
+        vectors=_vec(256, datatype=Datatype.FLOAT16),
+        replication_factor=2,
     )
     [finding] = (await _report(info)).findings
 
     assert finding.evidence["bytes_by_vector"] == {"": MEMORY_HINT_BYTES}
+    assert finding.evidence["replication_factor"] == 2
+
+
+async def test_memory_ignores_the_replication_factor() -> None:
+    info = _info(points=BIG, indexed=BIG, vectors=_vec(128), replication_factor=2)
+
+    assert "memory" not in _rules(await _report(info))
 
 
 async def test_memory_under_the_threshold_stays_silent() -> None:
@@ -270,9 +299,11 @@ async def test_memory_under_the_threshold_stays_silent() -> None:
         _vec(256, on_disk=True),
         _vec(256, quantization_config=INT8),
         _vec(256, multivector_config=MultiVectorConfig(comparator=MultiVectorComparator.MAX_SIM)),
-        _vec(256, datatype=Datatype.UINT8),  # 1 byte per dimension: a quarter of the threshold
+        # 1 byte per dimension or less: an int8 copy saves nothing (turbo4 would double).
+        _vec(1024, datatype=Datatype.UINT8),
+        _vec(2048, datatype=Datatype.TURBO4),
     ],
-    ids=["cold", "on_disk", "quantized", "multivector", "uint8"],
+    ids=["cold", "on_disk", "quantized", "multivector", "uint8", "turbo4"],
 )
 async def test_memory_skips_vectors_that_are_not_big_float_in_ram(vector: VectorParams) -> None:
     info = _info(points=BIG, indexed=BIG, vectors={"v": vector})
