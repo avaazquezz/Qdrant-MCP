@@ -9,7 +9,13 @@
 // records what the repository records; the first person is reserved for nothing.
 
 export type Lang = 'en' | 'es'
-export type ScenarioId = 'hybrid-search' | 'zero-downtime-reindex' | 'know-the-payload' | 'safety-rails'
+export type ScenarioId =
+  | 'text-search'
+  | 'search-advisor'
+  | 'hybrid-search'
+  | 'zero-downtime-reindex'
+  | 'know-the-payload'
+  | 'safety-rails'
 export type ToolsetId = 'core' | 'search' | 'payload' | 'snapshots' | 'admin' | 'observability'
 
 export interface Copy {
@@ -185,7 +191,7 @@ const en: Copy = {
   hero: {
     kicker: 'Portfolio project · Adrián Vázquez',
     title: "Qdrant's whole API as {tools} MCP tools. Every claim tested against a real server.",
-    deck: 'A Model Context Protocol server in Python that lets an LLM manage a Qdrant vector database. Its engineering log is public: what went wrong, how it was found, and the test that now stands guard.',
+    deck: 'A Model Context Protocol server in Python that lets an LLM manage a Qdrant vector database, search it in plain text, and diagnose and tune it. Its engineering log is public: what went wrong, how it was found, and the test that now stands guard.',
     ctaPrimary: 'Open the repository',
     ctaSecondary: 'Read the engineering log',
     canvasLabel:
@@ -215,12 +221,13 @@ const en: Copy = {
         name: 'Probe',
         body: 'Run the scenario against a real Qdrant server, the failure path first. Read the state afterwards, not just the response.',
         example:
-          'A valid alias operation followed by a failing one, then list the aliases: the first is still applied. So the tool does not say "atomic".',
+          'A valid alias operation followed by a failing one, then list the aliases. On Qdrant 1.19 the first was still applied, so the tool did not say "atomic".',
       },
       {
         name: 'Pin',
         body: 'Turn what was observed into an integration test, so a future Qdrant release that changes it fails CI instead of silently making the documentation stale.',
-        example: 'test_alias_batch_is_not_rolled_back_when_a_later_operation_fails',
+        example:
+          'test_alias_batch_is_all_or_nothing — it failed in CI the day Qdrant 1.20 made those batches all-or-nothing, and the description changed with it.',
       },
       {
         name: 'Review',
@@ -272,20 +279,21 @@ const en: Copy = {
       {
         name: 'call_qdrant',
         tag: 'retry · translated errors',
-        why: 'Transport failures are retried with backoff. A Qdrant error reaches the model as Qdrant’s own message, never as a generic "Error executing tool".',
+        why: 'Only a request that never reached Qdrant is retried: after a timeout, a write may already have happened, so the model is told to check instead of the call being repeated. A Qdrant error reaches the model as Qdrant’s own message, never as a generic "Error executing tool".',
         source: 'src/mcp_qdrant/tools/errors.py',
         payloadTitle: 'What goes to Qdrant',
         payloadLines: [
           'POST /collections/{collection}/points/query',
           '',
-          'transport error  → retried with backoff',
-          'Qdrant error     → ToolError(Qdrant’s own message)',
+          'connection refused → retried with backoff',
+          'timeout after send → "may have been applied", not retried',
+          'Qdrant error       → ToolError(Qdrant’s own message)',
         ],
       },
       {
         name: 'Qdrant',
         tag: 'qdrant-client over REST',
-        why: 'The official SDK, so tool inputs reuse its models and track its version. The server never generates embeddings: you bring your vectors.',
+        why: 'The official SDK, so tool inputs reuse its models and track its version. The client brings vectors — or plain text, embedded locally with the model the collection declares in its own metadata.',
         source: 'ROADMAP.md · principle 1',
         payloadTitle: 'Qdrant’s answer, summarized',
         payloadLines: [],
@@ -294,7 +302,7 @@ const en: Copy = {
   },
   scenarios: {
     ordinal: 'In action',
-    title: 'Four things a model can do with it.',
+    title: 'Six things a model can do with it.',
     lead: 'These are not mock-ups. Every call below was executed through the MCP server against a real Qdrant, and the response is what came back.',
     play: 'Play',
     pause: 'Pause',
@@ -306,11 +314,38 @@ const en: Copy = {
     recorded:
       'Recorded against Qdrant {qdrant} with mcp-qdrant {mcp}. CI re-records it on every pull request and fails if it changes.',
     tabs: {
+      'text-search': {
+        tab: 'Search in plain text',
+        title: 'Search by meaning, by keywords, or both',
+        intro:
+          'Six help-center articles stored as plain text. The collection declares its embedding model in its own metadata, so every query and every write uses that same model; keyword search needs no model at all.',
+        steps: [
+          'Create a text collection: a multilingual embedding model for meaning, and a BM25 index (English stemming) for keywords.',
+          'Write six articles as plain text. One text is one point: the server embeds it and keeps the text in the payload.',
+          'A question that shares no word with the answer: "Reset your password" ranks first.',
+          'The same question in Spanish finds the same article: the model is multilingual.',
+          'Keywords, ranked by BM25 inside Qdrant: only the billing article mentions an invoice.',
+          'Both at once, fused with Reciprocal Rank Fusion: "Set up single sign-on" for a question about signing in with a company account.',
+        ],
+      },
+      'search-advisor': {
+        tab: 'Diagnose and measure',
+        title: 'A doctor and a ruler for search quality',
+        intro:
+          'Two hundred random vectors with int8 quantization, prepared beforehand. The index is built on a single thread so this recording is reproducible: the numbers below come back identical on every run.',
+        steps: [
+          'The collection, as it was prepared: scalar int8 quantization, an HNSW index built single-threaded.',
+          'The doctor checks status, index, memory, aliases and text setup. One finding, with the exact call that acts on it.',
+          'Apply that call as given, with a real alias name in place of the placeholder.',
+          'The doctor again: nothing left to report.',
+          'Measure every point as a query against an exact search. Quantized without rescoring, some true neighbors are lost; rescoring brings recall to 1.0. A search setting, not a rebuild.',
+        ],
+      },
       'hybrid-search': {
         tab: 'Hybrid search',
         title: 'Hybrid search, and why fusing matters',
         intro:
-          'Six help-center articles, each with a dense vector and a sparse (keyword) vector. The vectors are hand-made and tiny so you can read them: this server never creates embeddings.',
+          'The same idea with vectors you bring yourself: six articles, each with a dense vector and a sparse (keyword) vector, hand-made and tiny so you can read them.',
         steps: [
           'Create a collection with one named dense vector and one sparse vector.',
           'Write six articles. The tool takes named dense and sparse vectors in the same point.',
@@ -330,7 +365,7 @@ const en: Copy = {
           'Point the alias demo_docs at it. Clients use the alias from now on.',
           'Create the replacement with another distance (Euclid) and a different HNSW setting.',
           'Copy the points between the collections, addressing the source through its alias. It runs entirely on the server.',
-          'Re-point the alias with a single operation. One operation is all-or-nothing; a batch of them is not (see the log).',
+          'Re-point the alias with a single operation.',
           'The alias now answers from the new collection: Euclid, the same four points.',
         ],
       },
@@ -376,11 +411,11 @@ const en: Copy = {
     badges: { readOnly: 'read-only', destructive: 'destructive', idempotent: 'idempotent' },
     onByDefault: 'on by default',
     toolsets: {
-      core: 'Collection and point CRUD, qdrant_query and a health check. A complete server on its own.',
+      core: 'Collection and point CRUD, qdrant_query (vectors or plain text) and a health check. A complete server on its own.',
       search: 'Batched and grouped queries, recommend, discover, distance matrices.',
       payload: 'Payload editing and indexing, named vectors, ordered batch operations.',
       snapshots: 'Backup and restore, per collection and for the whole storage.',
-      admin: 'Aliases, shard layout, optimizer progress, collection copy, payload profiling.',
+      admin: 'Aliases, shard layout, optimizer progress, collection copy, payload profiling, and the advisor: a collection doctor and a search-quality evaluation.',
       observability: 'Telemetry, metrics, quotas, self-diagnosed issues.',
     },
   },
@@ -397,7 +432,7 @@ const en: Copy = {
     announceCopied: 'Config copied to the clipboard.',
     announceFailed: 'Copy failed. The text is selected: press Control C or Command C.',
     paths: {
-      uvx: 'Claude Code or any MCP client: uvx runs it without installing',
+      uvx: "Claude Code or any MCP client: uvx runs it without installing (for search by meaning, uvx --from 'mcp-qdrant[embeddings]' mcp-qdrant)",
       mcpb: 'Claude Desktop: download mcp-qdrant.mcpb from the latest release and double-click it',
       docker: 'Docker, for streamable-http',
       dockerNote:
@@ -423,7 +458,7 @@ const en: Copy = {
     ordinal: 'Quality',
     title: 'What keeps it honest.',
     lead: 'None of this is promised on the page. It is enforced by the repository.',
-    pipeline: ['push', 'lint · types · generators', 'tests · real Qdrant', 'merge', 'tag', 'PyPI · GHCR · .mcpb'],
+    pipeline: ['push', 'lint · types · generators', 'tests · real Qdrant', 'merge', 'tag', 'PyPI · GHCR · .mcpb', 'MCP Registry'],
     cards: [
       {
         title: 'Continuous integration',
@@ -431,7 +466,7 @@ const en: Copy = {
       },
       {
         title: 'Releases',
-        body: 'A tag publishes to PyPI with Trusted Publishing (no stored token), pushes the Docker image to GHCR and attaches the .mcpb bundle to the release. Three workflows, checked after every tag.',
+        body: 'A tag publishes to PyPI with Trusted Publishing (no stored token), pushes the Docker image to GHCR and attaches the .mcpb bundle to the release; once PyPI has it, the MCP Registry entry follows, authenticated by GitHub itself. Four workflows, checked after every tag.',
       },
       {
         title: 'Roadmap',
@@ -448,8 +483,8 @@ const en: Copy = {
         a: 'No. It is an independent, MIT-licensed project that wraps Qdrant’s own qdrant-client SDK.',
       },
       {
-        q: 'Why does it not create embeddings?',
-        a: 'It is a wrapper, not a RAG system, on purpose: the first principle in the roadmap. It never embeds, parses or chunks anything; the client brings its vectors. That keeps the server small and makes every tool a faithful reflection of one Qdrant operation.',
+        q: 'Does it create embeddings?',
+        a: 'Only to search or store plain text, and only with the optional embeddings extra: the text is embedded locally with fastembed, using the model the collection declares in its own metadata — never a guessed one. It still never parses or splits documents: one text is one point. Keyword search (BM25) needs no model at all; Qdrant 1.20 ranks a text index.',
       },
       {
         q: 'Is there a hosted version?',
@@ -457,11 +492,11 @@ const en: Copy = {
       },
       {
         q: 'How was it built?',
-        a: 'Python 3.12 with uv, on top of the official MCP Python SDK and qdrant-client, with Pydantic validating every input and tenacity retrying transport failures. Quality is enforced by pytest against a real Qdrant in CI, strict mypy, ruff and pre-commit; GitHub Actions publishes to PyPI (Trusted Publishing), to GHCR and as a Claude Desktop bundle. Claude Code assisted the work and the commits carry its Co-Authored-By trailer; what decides what is true is the toolchain, not the assistant. This page is Nuxt, Tailwind, GSAP and Lenis, served by nginx in Docker.',
+        a: 'Python 3.12 with uv, on top of the official MCP Python SDK and qdrant-client, with Pydantic validating every input, tenacity retrying transport failures and fastembed for local embeddings. Quality is enforced by pytest against a real Qdrant in CI, strict mypy, ruff and pre-commit; GitHub Actions publishes to PyPI (Trusted Publishing), to GHCR and as a Claude Desktop bundle. Claude Code assisted the work and the commits carry its Co-Authored-By trailer; what decides what is true is the toolchain, not the assistant. This page is Nuxt, Tailwind, GSAP and Lenis, served by nginx in Docker.',
       },
       {
         q: 'Which Qdrant versions does it support?',
-        a: 'v1.19.0 and newer are the only versions it is tested against. Two tools need an endpoint that older servers answer with 404.',
+        a: 'CI tests it against v1.20.0, and every claim in the tool descriptions is pinned against that version. Text search needs v1.16 or newer and its BM25 mode v1.20; two vector tools need an endpoint that servers older than v1.19 answer with 404.',
       },
       {
         q: 'What does it not cover?',
@@ -515,7 +550,7 @@ const es: Copy = {
   hero: {
     kicker: 'Proyecto de portfolio · Adrián Vázquez',
     title: 'Toda la API de Qdrant como {tools} herramientas MCP. Cada afirmación, probada contra un servidor real.',
-    deck: 'Un servidor del Model Context Protocol en Python que permite a un LLM gestionar una base de datos vectorial Qdrant. Su bitácora de ingeniería es pública: qué falló, cómo se descubrió y el test que ahora hace guardia.',
+    deck: 'Un servidor del Model Context Protocol en Python que permite a un LLM gestionar una base de datos vectorial Qdrant, buscar en ella con texto normal, y diagnosticarla y afinarla. Su bitácora de ingeniería es pública: qué falló, cómo se descubrió y el test que ahora hace guardia.',
     ctaPrimary: 'Abrir el repositorio',
     ctaSecondary: 'Leer la bitácora de ingeniería',
     canvasLabel:
@@ -545,12 +580,13 @@ const es: Copy = {
         name: 'Probar',
         body: 'Ejecutar el escenario contra un servidor Qdrant real, empezando por el camino de fallo. Leer el estado después, no solo la respuesta.',
         example:
-          'Una operación de alias válida seguida de otra que falla, y luego listar los alias: la primera sigue aplicada. Por eso la herramienta no dice "atómico".',
+          'Una operación de alias válida seguida de otra que falla, y luego listar los alias. En Qdrant 1.19 la primera seguía aplicada, así que la herramienta no decía "atómico".',
       },
       {
         name: 'Fijar',
         body: 'Convertir lo observado en un test de integración, de modo que una versión futura de Qdrant que lo cambie rompa el CI en lugar de dejar la documentación obsoleta en silencio.',
-        example: 'test_alias_batch_is_not_rolled_back_when_a_later_operation_fails',
+        example:
+          'test_alias_batch_is_all_or_nothing — falló en CI el día que Qdrant 1.20 hizo esos lotes todo o nada, y la descripción cambió con él.',
       },
       {
         name: 'Revisar',
@@ -602,20 +638,21 @@ const es: Copy = {
       {
         name: 'call_qdrant',
         tag: 'reintentos · errores traducidos',
-        why: 'Los fallos de transporte se reintentan con backoff. Un error de Qdrant llega al modelo como el mensaje propio de Qdrant, nunca como un genérico "Error executing tool".',
+        why: 'Solo se reintenta una petición que no llegó a Qdrant: tras un timeout, una escritura puede haberse aplicado ya, así que al modelo se le pide comprobarlo en vez de repetir la llamada. Un error de Qdrant llega al modelo como el mensaje propio de Qdrant, nunca como un genérico "Error executing tool".',
         source: 'src/mcp_qdrant/tools/errors.py',
         payloadTitle: 'Qué se envía a Qdrant',
         payloadLines: [
           'POST /collections/{collection}/points/query',
           '',
-          'error de transporte → se reintenta con backoff',
-          'error de Qdrant     → ToolError(el mensaje propio de Qdrant)',
+          'conexión rechazada   → se reintenta con backoff',
+          'timeout tras enviar  → "puede haberse aplicado", sin reintento',
+          'error de Qdrant      → ToolError(el mensaje propio de Qdrant)',
         ],
       },
       {
         name: 'Qdrant',
         tag: 'qdrant-client sobre REST',
-        why: 'El SDK oficial, de modo que las entradas de las herramientas reutilizan sus modelos y siguen su versión. El servidor nunca genera embeddings: tú traes tus vectores.',
+        why: 'El SDK oficial, de modo que las entradas de las herramientas reutilizan sus modelos y siguen su versión. El cliente trae vectores, o texto normal, que se incrusta en local con el modelo que la colección declara en sus propios metadatos.',
         source: 'ROADMAP.md · principio 1',
         payloadTitle: 'La respuesta de Qdrant, resumida',
         payloadLines: [],
@@ -624,7 +661,7 @@ const es: Copy = {
   },
   scenarios: {
     ordinal: 'En acción',
-    title: 'Cuatro cosas que un modelo puede hacer con él.',
+    title: 'Seis cosas que un modelo puede hacer con él.',
     lead: 'No son maquetas. Cada llamada de abajo se ejecutó a través del servidor MCP contra un Qdrant real, y la respuesta es la que devolvió.',
     play: 'Reproducir',
     pause: 'Pausar',
@@ -636,11 +673,38 @@ const es: Copy = {
     recorded:
       'Grabado contra Qdrant {qdrant} con mcp-qdrant {mcp}. CI lo vuelve a grabar en cada pull request y falla si cambia.',
     tabs: {
+      'text-search': {
+        tab: 'Buscar con texto',
+        title: 'Buscar por significado, por palabras clave o por ambas',
+        intro:
+          'Seis artículos de un centro de ayuda guardados como texto normal. La colección declara su modelo de embeddings en sus propios metadatos, así que cada consulta y cada escritura usan ese mismo modelo; la búsqueda por palabras clave no necesita modelo.',
+        steps: [
+          'Crear una colección de texto: un modelo de embeddings multilingüe para el significado y un índice BM25 (con stemming en inglés) para las palabras clave.',
+          'Escribir seis artículos como texto normal. Un texto es un punto: el servidor lo incrusta y guarda el texto en el payload.',
+          'Una pregunta que no comparte ninguna palabra con la respuesta: "Reset your password" queda primero.',
+          'La misma pregunta en español encuentra el mismo artículo: el modelo es multilingüe.',
+          'Palabras clave, ordenadas por BM25 dentro de Qdrant: solo el artículo de facturación menciona una factura.',
+          'Las dos a la vez, fusionadas con Reciprocal Rank Fusion: "Set up single sign-on" para una pregunta sobre entrar con la cuenta de la empresa.',
+        ],
+      },
+      'search-advisor': {
+        tab: 'Diagnosticar y medir',
+        title: 'Un médico y una regla para la calidad de búsqueda',
+        intro:
+          'Doscientos vectores aleatorios con cuantización int8, preparados de antemano. El índice se construye en un solo hilo para que esta grabación sea reproducible: las cifras de abajo salen idénticas en cada ejecución.',
+        steps: [
+          'La colección tal como se preparó: cuantización escalar int8 y un índice HNSW construido en un solo hilo.',
+          'El doctor revisa estado, índice, memoria, aliases y configuración de texto. Un hallazgo, con la llamada exacta que lo resuelve.',
+          'Aplicar esa llamada tal cual, con un nombre de alias real en lugar del marcador.',
+          'El doctor otra vez: ya no queda nada que señalar.',
+          'Medir cada punto como consulta frente a una búsqueda exacta. Cuantizado sin rescore se pierden algunos vecinos de verdad; con rescore el recall llega a 1,0. Un ajuste de búsqueda, no una reconstrucción.',
+        ],
+      },
       'hybrid-search': {
         tab: 'Búsqueda híbrida',
         title: 'Búsqueda híbrida, y por qué importa fusionar',
         intro:
-          'Seis artículos de un centro de ayuda, cada uno con un vector denso y un vector disperso (de palabras clave). Los vectores son artesanales y diminutos para que se puedan leer: este servidor nunca crea embeddings.',
+          'La misma idea con vectores que traes tú: seis artículos, cada uno con un vector denso y un vector disperso (de palabras clave), artesanales y diminutos para que se puedan leer.',
         steps: [
           'Crear una colección con un vector denso con nombre y un vector disperso.',
           'Escribir seis artículos. La herramienta acepta vectores densos y dispersos con nombre en el mismo punto.',
@@ -660,7 +724,7 @@ const es: Copy = {
           'Apuntar el alias demo_docs a ella. Desde ahora los clientes usan el alias.',
           'Crear la colección de reemplazo con otra distancia (Euclid) y otro ajuste de HNSW.',
           'Copiar los puntos entre las colecciones, direccionando el origen por su alias. Se ejecuta entero en el servidor.',
-          'Reapuntar el alias con una sola operación. Una operación es todo o nada; un lote de ellas, no (véase la bitácora).',
+          'Reapuntar el alias con una sola operación.',
           'El alias ahora responde desde la colección nueva: Euclid, los mismos cuatro puntos.',
         ],
       },
@@ -706,11 +770,11 @@ const es: Copy = {
     badges: { readOnly: 'solo lectura', destructive: 'destructiva', idempotent: 'idempotente' },
     onByDefault: 'activo por defecto',
     toolsets: {
-      core: 'CRUD de colecciones y puntos, qdrant_query y una comprobación de salud. Un servidor completo por sí solo.',
+      core: 'CRUD de colecciones y puntos, qdrant_query (con vectores o con texto) y una comprobación de salud. Un servidor completo por sí solo.',
       search: 'Consultas por lotes y agrupadas, recommend, discover, matrices de distancia.',
       payload: 'Edición e indexado de payload, vectores con nombre, operaciones por lotes ordenadas.',
       snapshots: 'Copia y restauración, por colección y de todo el almacenamiento.',
-      admin: 'Aliases, disposición de shards, progreso del optimizador, copia de colecciones, perfilado de payload.',
+      admin: 'Aliases, disposición de shards, progreso del optimizador, copia de colecciones, perfilado de payload y el asesor: un doctor de colecciones y una evaluación de la calidad de búsqueda.',
       observability: 'Telemetría, métricas, cuotas, incidencias autodiagnosticadas.',
     },
   },
@@ -727,7 +791,7 @@ const es: Copy = {
     announceCopied: 'Configuración copiada al portapapeles.',
     announceFailed: 'Falló la copia. El texto queda seleccionado: pulsa Control C o Comando C.',
     paths: {
-      uvx: 'Claude Code o cualquier cliente MCP: uvx lo ejecuta sin instalar',
+      uvx: "Claude Code o cualquier cliente MCP: uvx lo ejecuta sin instalar (para buscar por significado, uvx --from 'mcp-qdrant[embeddings]' mcp-qdrant)",
       mcpb: 'Claude Desktop: descarga mcp-qdrant.mcpb de la última release y haz doble clic',
       docker: 'Docker, para streamable-http',
       dockerNote:
@@ -753,7 +817,7 @@ const es: Copy = {
     ordinal: 'Calidad',
     title: 'Lo que lo mantiene honesto.',
     lead: 'Nada de esto se promete en la página. Lo impone el repositorio.',
-    pipeline: ['push', 'lint · tipos · generadores', 'tests · Qdrant real', 'merge', 'tag', 'PyPI · GHCR · .mcpb'],
+    pipeline: ['push', 'lint · tipos · generadores', 'tests · Qdrant real', 'merge', 'tag', 'PyPI · GHCR · .mcpb', 'MCP Registry'],
     cards: [
       {
         title: 'Integración continua',
@@ -761,7 +825,7 @@ const es: Copy = {
       },
       {
         title: 'Releases',
-        body: 'Un tag publica en PyPI con Trusted Publishing (sin token guardado), sube la imagen de Docker a GHCR y adjunta el bundle .mcpb a la release. Tres workflows, comprobados tras cada tag.',
+        body: 'Un tag publica en PyPI con Trusted Publishing (sin token guardado), sube la imagen de Docker a GHCR y adjunta el bundle .mcpb a la release; cuando PyPI ya la tiene, la entrada del MCP Registry la sigue, autenticada por el propio GitHub. Cuatro workflows, comprobados tras cada tag.',
       },
       {
         title: 'Roadmap',
@@ -778,8 +842,8 @@ const es: Copy = {
         a: 'No. Es un proyecto independiente con licencia MIT que envuelve el SDK qdrant-client de la propia Qdrant.',
       },
       {
-        q: '¿Por qué no crea embeddings?',
-        a: 'Es un wrapper, no un sistema RAG, a propósito: es el primer principio del roadmap. Nunca incrusta, parsea ni trocea nada; el cliente trae sus vectores. Eso mantiene el servidor pequeño y hace que cada herramienta sea un reflejo fiel de una operación de Qdrant.',
+        q: '¿Crea embeddings?',
+        a: 'Solo para buscar o guardar texto normal, y solo con el extra opcional embeddings: el texto se incrusta en local con fastembed, usando el modelo que la colección declara en sus propios metadatos, nunca uno supuesto. Sigue sin parsear ni trocear documentos: un texto es un punto. La búsqueda por palabras clave (BM25) no necesita modelo; la ordena Qdrant 1.20 sobre un índice de texto.',
       },
       {
         q: '¿Hay una versión alojada?',
@@ -787,11 +851,11 @@ const es: Copy = {
       },
       {
         q: '¿Cómo se construyó?',
-        a: 'Python 3.12 con uv, sobre el SDK oficial de Python de MCP y qdrant-client, con Pydantic validando cada entrada y tenacity reintentando los fallos de transporte. La calidad la imponen pytest contra un Qdrant real en CI, mypy estricto, ruff y pre-commit; GitHub Actions publica en PyPI (Trusted Publishing), en GHCR y como bundle para Claude Desktop. Claude Code ayudó en el trabajo y los commits llevan su trailer Co-Authored-By; lo que decide qué es verdad es la cadena de herramientas, no el asistente. Esta página es Nuxt, Tailwind, GSAP y Lenis, servida por nginx en Docker.',
+        a: 'Python 3.12 con uv, sobre el SDK oficial de Python de MCP y qdrant-client, con Pydantic validando cada entrada, tenacity reintentando los fallos de transporte y fastembed para los embeddings en local. La calidad la imponen pytest contra un Qdrant real en CI, mypy estricto, ruff y pre-commit; GitHub Actions publica en PyPI (Trusted Publishing), en GHCR y como bundle para Claude Desktop. Claude Code ayudó en el trabajo y los commits llevan su trailer Co-Authored-By; lo que decide qué es verdad es la cadena de herramientas, no el asistente. Esta página es Nuxt, Tailwind, GSAP y Lenis, servida por nginx en Docker.',
       },
       {
         q: '¿Qué versiones de Qdrant soporta?',
-        a: 'La v1.19.0 y posteriores son las únicas contra las que se prueba. Dos herramientas necesitan un endpoint al que los servidores antiguos responden con 404.',
+        a: 'CI lo prueba contra la v1.20.0, y cada afirmación de las descripciones de las herramientas está fijada contra esa versión. La búsqueda por texto necesita la v1.16 o posterior y su modo BM25, la v1.20; dos herramientas de vectores necesitan un endpoint al que los servidores anteriores a la v1.19 responden con 404.',
       },
       {
         q: '¿Qué no cubre?',

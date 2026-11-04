@@ -66,11 +66,11 @@ export const LOG: LogEntry[] = [
   },
   {
     id: 'alias-atomicity',
-    versions: ['2.2.0'],
-    prs: [33],
+    versions: ['2.2.0', '2.7.0'],
+    prs: [33, 43],
     tests: [
       {
-        name: 'test_alias_batch_is_not_rolled_back_when_a_later_operation_fails',
+        name: 'test_alias_batch_is_all_or_nothing',
         file: 'tests/integration/test_admin_integration.py',
       },
     ],
@@ -81,8 +81,8 @@ export const LOG: LogEntry[] = [
         claim: 'Alias operations sent in one call are applied atomically (the first draft of the tool description).',
         probe:
           'One request with a valid "create alias" followed by a "create alias" on a collection that does not exist, then list the aliases.',
-        result: 'The request fails, but the first alias is still there. A batch is not rolled back.',
-        fix: 'The description says so and recommends a single operation to re-point an alias, which is all-or-nothing by definition. An integration test fails if Qdrant ever changes this.',
+        result: 'On Qdrant 1.19 the request fails, but the first alias is still there: a batch is not rolled back.',
+        fix: 'The description said so, and an integration test pinned it. When Qdrant 1.20 made alias batches all-or-nothing, that test failed in CI, and the description and the test changed with it (v2.7.0).',
       },
       es: {
         title: 'El lote de alias que no era atómico',
@@ -90,18 +90,18 @@ export const LOG: LogEntry[] = [
           'Las operaciones de alias enviadas en una llamada se aplican de forma atómica (el primer borrador de la descripción de la herramienta).',
         probe:
           'Una petición con un "crear alias" válido seguido de otro sobre una colección que no existe, y luego listar los alias.',
-        result: 'La petición falla, pero el primer alias sigue ahí. Un lote no se revierte.',
-        fix: 'La descripción lo dice y recomienda una sola operación para reapuntar un alias, que es todo o nada por definición. Un test de integración falla si Qdrant cambia esto alguna vez.',
+        result: 'En Qdrant 1.19 la petición falla, pero el primer alias sigue ahí: un lote no se revierte.',
+        fix: 'La descripción lo decía y un test de integración lo fijaba. Cuando Qdrant 1.20 hizo los lotes de alias todo o nada, ese test falló en CI, y la descripción y el test cambiaron con él (v2.7.0).',
       },
     },
   },
   {
     id: 'mmr-noop',
-    versions: ['2.4.0'],
-    prs: [35],
+    versions: ['2.4.0', '2.7.0'],
+    prs: [35, 43],
     tests: [
       {
-        name: 'test_mmr_needs_candidates_beyond_limit_and_offset_pages_inside_the_limit',
+        name: 'test_mmr_needs_candidates_beyond_limit_and_offset_pages_the_mmr_ranking',
         file: 'tests/integration/test_query_power_integration.py',
       },
     ],
@@ -112,16 +112,16 @@ export const LOG: LogEntry[] = [
         claim: 'MMR re-ranks results for diversity.',
         probe: 'Query with MMR, no candidate limit and a limit of 2, and compare it with the plain query.',
         result:
-          'Identical results. The candidate pool defaults to the limit, so MMR has nothing to choose from. And the offset is applied inside those results: offset 1 with limit 2 returns one point.',
-        fix: 'Both facts are in the tool description and pinned by a test.',
+          'Identical results. The candidate pool defaults to the limit, so MMR has nothing to choose from. And on Qdrant 1.19 the offset is applied inside those results: offset 1 with limit 2 returns one point.',
+        fix: 'Both facts went into the tool description, pinned by a test. That test caught Qdrant 1.20 changing the second one — offset now pages through the MMR ranking — and the description followed (v2.7.0).',
       },
       es: {
         title: 'Una diversidad que no hacía nada',
         claim: 'MMR reordena los resultados para dar diversidad.',
         probe: 'Consultar con MMR, sin límite de candidatos y con límite 2, y compararlo con la consulta normal.',
         result:
-          'Resultados idénticos. El conjunto de candidatos por defecto es el límite, así que MMR no tiene entre qué elegir. Y el offset se aplica dentro de esos resultados: offset 1 con límite 2 devuelve un punto.',
-        fix: 'Ambos hechos están en la descripción de la herramienta y fijados por un test.',
+          'Resultados idénticos. El conjunto de candidatos por defecto es el límite, así que MMR no tiene entre qué elegir. Y en Qdrant 1.19 el offset se aplica dentro de esos resultados: offset 1 con límite 2 devuelve un punto.',
+        fix: 'Ambos hechos pasaron a la descripción de la herramienta, fijados por un test. Ese test cazó que Qdrant 1.20 cambiaba el segundo —el offset ahora pagina el ranking de MMR— y la descripción lo siguió (v2.7.0).',
       },
     },
   },
@@ -302,6 +302,126 @@ export const LOG: LogEntry[] = [
         result:
           'Qdrant responde 400: una clave así necesita comillas dobles. Una clave literal "k[]" se leía como una ruta de array, y un índice creado sobre una clave entre comillas no coincidía nunca con su entrada en el perfil.',
         fix: 'Las claves se entrecomillan donde la sintaxis lo exige, que es también la forma en que Qdrant informa de los índices, así que las claves ahora coinciden con su índice.',
+      },
+    },
+  },
+  {
+    id: 'partial-writes',
+    versions: ['2.7.1'],
+    prs: [44],
+    tests: [
+      {
+        name: 'test_an_unknown_id_fails_the_call_but_existing_ids_are_still_written',
+        file: 'tests/integration/test_behavior_audit_integration.py',
+      },
+    ],
+    review: true,
+    text: {
+      en: {
+        title: 'An error that had already written half',
+        claim: 'Nothing: the payload and vector tools did not say what an unknown id does.',
+        probe: 'Set a payload on ids [999, 3], where 999 does not exist, then read point 3.',
+        result:
+          'The call fails with "No point with id 999 found", yet point 3 has the new payload. A model reading the error believes nothing changed.',
+        fix: 'All six payload and vector tools now warn that the ids that exist are still written, and to re-read them before retrying.',
+      },
+      es: {
+        title: 'Un error que ya había escrito la mitad',
+        claim: 'Nada: las herramientas de payload y de vectores no decían qué hace un id desconocido.',
+        probe: 'Fijar un payload en los ids [999, 3], donde el 999 no existe, y leer después el punto 3.',
+        result:
+          'La llamada falla con "No point with id 999 found", pero el punto 3 tiene el payload nuevo. Un modelo que lee el error cree que no cambió nada.',
+        fix: 'Las seis herramientas de payload y de vectores avisan ahora de que los ids que existen sí se escriben, y de que hay que releerlos antes de reintentar.',
+      },
+    },
+  },
+  {
+    id: 'mcpb-never-started',
+    versions: ['2.8.0'],
+    prs: [45],
+    tests: [
+      {
+        name: 'test_the_mcpb_launch_command_serves_tools',
+        file: 'tests/integration/test_mcpb_launch_integration.py',
+      },
+    ],
+    review: false,
+    text: {
+      en: {
+        title: 'The bundle that never started',
+        claim: 'Claude Desktop installs the server from the .mcpb bundle with a double click (in the README since v1.0.0).',
+        probe: 'Launch the server with the exact command in the bundle’s manifest and talk to it with a real MCP client.',
+        result:
+          'It died on import. Running the CLI file as a script put the package’s own folder first on the import path, so its module qdrant_client.py shadowed the real qdrant-client library. Only the manifest’s schema had ever been checked.',
+        fix: 'The bundle runs the installed console script. A test launches it exactly as the manifest says, lists the tools and calls one; it fails with the old command.',
+      },
+      es: {
+        title: 'El bundle que nunca arrancó',
+        claim: 'Claude Desktop instala el servidor desde el bundle .mcpb con un doble clic (en el README desde la v1.0.0).',
+        probe: 'Arrancar el servidor con el comando exacto del manifest del bundle y hablarle con un cliente MCP real.',
+        result:
+          'Moría al importar. Ejecutar el fichero de la CLI como script ponía la carpeta del propio paquete la primera en la ruta de importación, así que su módulo qdrant_client.py tapaba la librería qdrant-client real. Solo se había comprobado el schema del manifest.',
+        fix: 'El bundle ejecuta el script de consola instalado. Un test lo arranca exactamente como dice el manifest, lista las herramientas y llama a una; con el comando antiguo falla.',
+      },
+    },
+  },
+  {
+    id: 'silent-truncation',
+    versions: ['2.8.0'],
+    prs: [45],
+    tests: [
+      {
+        name: 'test_a_text_longer_than_the_model_reads_is_refused',
+        file: 'tests/integration/test_text_search_integration.py',
+      },
+    ],
+    review: true,
+    text: {
+      en: {
+        title: 'A text cut short without a word',
+        claim: 'One text is one point: nothing is split (the new upsert description).',
+        probe: 'Embed a 900-character text, then the same text with a sentence added at the end, and compare the vectors.',
+        result:
+          'Identical vectors. The model reads 128 tokens and silently drops the rest, so the end of a long text never reaches its vector.',
+        fix: 'A text longer than the model reads is refused with its token limit, and the description says to split it into several points.',
+      },
+      es: {
+        title: 'Un texto recortado sin avisar',
+        claim: 'Un texto es un punto: no se trocea nada (la nueva descripción del upsert).',
+        probe: 'Incrustar un texto de 900 caracteres y luego el mismo texto con una frase añadida al final, y comparar los vectores.',
+        result:
+          'Vectores idénticos. El modelo lee 128 tokens y descarta el resto en silencio, así que el final de un texto largo nunca llega a su vector.',
+        fix: 'Un texto más largo de lo que lee el modelo se rechaza indicando su límite de tokens, y la descripción pide partirlo en varios puntos.',
+      },
+    },
+  },
+  {
+    id: 'memory-fix',
+    versions: ['2.10.0'],
+    prs: [48],
+    tests: [
+      {
+        name: 'test_the_memory_fix_leaves_out_the_vectors_the_rule_left_out',
+        file: 'tests/unit/test_doctor.py',
+      },
+    ],
+    review: true,
+    text: {
+      en: {
+        title: 'A memory fix that could double the memory',
+        claim: 'The doctor’s fix for unquantized vectors in RAM pins an int8 copy and moves the originals to disk, so RAM drops.',
+        probe: 'Apply the fix, as emitted, to a collection where the big vector sits next to a cold one and a multivector, and read the collection config back.',
+        result:
+          'The fix quantized the whole collection, including the vectors the rule had deliberately left out. And for a vector already stored at one byte per dimension or less, an int8 copy saves nothing; at half a byte, it doubles.',
+        fix: 'Quantization is now set per vector, only on the ones the rule counted, and vectors of one byte per dimension or less are not counted.',
+      },
+      es: {
+        title: 'Un arreglo de memoria que podía duplicar la memoria',
+        claim: 'El arreglo del doctor para vectores sin cuantizar en RAM fija una copia int8 y manda los originales a disco, así que la RAM baja.',
+        probe: 'Aplicar el arreglo, tal como se emite, a una colección donde el vector grande convive con uno frío y con un multivector, y releer la configuración.',
+        result:
+          'El arreglo cuantizaba toda la colección, incluidos los vectores que la regla había dejado fuera a propósito. Y para un vector ya guardado a un byte por dimensión o menos, una copia int8 no ahorra nada; a medio byte, duplica.',
+        fix: 'La cuantización se fija ahora por vector, solo en los que la regla contó, y los vectores de un byte por dimensión o menos no se cuentan.',
       },
     },
   },

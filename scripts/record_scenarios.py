@@ -18,9 +18,11 @@ Run `uv run python scripts/record_scenarios.py` to rewrite the file in place, or
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
+import random
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -30,7 +32,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import CallToolResult
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.http.models import DeleteAlias, DeleteAliasOperation
+from qdrant_client.http.models import CollectionStatus, DeleteAlias, DeleteAliasOperation
 
 from mcp_qdrant import __version__
 from mcp_qdrant.config import ALL_TOOLSETS, Settings
@@ -40,7 +42,17 @@ OUTPUT_PATH = (
     Path(__file__).resolve().parent.parent / "website" / "data" / "scenarios.generated.json"
 )
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
-DEMO_COLLECTIONS = ("demo_articles", "demo_docs_v1", "demo_docs_v2", "demo_events", "demo_safe")
+DEMO_COLLECTIONS = (
+    "demo_help",
+    "demo_tune",
+    "demo_articles",
+    "demo_docs_v1",
+    "demo_docs_v2",
+    "demo_events",
+    "demo_safe",
+)
+DEMO_ALIASES = ("demo_docs", "demo_tune_live")
+TEXT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 Summary = Callable[[dict[str, Any]], Any]
 
@@ -65,6 +77,11 @@ def _info(content: dict[str, Any]) -> dict[str, Any]:
     sparse = config["params"].get("sparse_vectors")
     if sparse:
         summary["sparse_vectors"] = sorted(sparse)
+    if config.get("quantization_config"):
+        summary["quantization"] = config["quantization_config"]
+    text = (config.get("metadata") or {}).get("mcp_qdrant")
+    if text:
+        summary["text"] = text
     return summary
 
 
@@ -78,6 +95,45 @@ def _hits(content: dict[str, Any]) -> dict[str, Any]:
             }
             for point in content["points"]
         ]
+    }
+
+
+def _ranked(content: dict[str, Any]) -> dict[str, Any]:
+    """Ids and titles only: embedding scores differ in the last digits between CPUs, so they
+    would make the CI re-recording flaky. The ranking is what the scenario shows."""
+    return {
+        "ranked": [
+            {"id": point["id"], "title": (point.get("payload") or {}).get("title")}
+            for point in content["points"]
+        ]
+    }
+
+
+def _doctor(content: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": content["status"],
+        "findings": [
+            {
+                "rule": f["rule"],
+                "severity": f["severity"],
+                "fix": f["fix"],
+            }
+            for f in content["findings"]
+        ],
+        "checked": content["checked"],
+    }
+
+
+def _quality(content: dict[str, Any]) -> dict[str, Any]:
+    """Without latencies: those are real but differ on every run."""
+    return {
+        "queries": content["queries"],
+        "limit": content["limit"],
+        "variants": [
+            {key: v[key] for key in ("search_params", "recall_mean", "recall_min")}
+            for v in content["variants"]
+        ],
+        "notes": content["notes"],
     }
 
 
@@ -108,17 +164,25 @@ SUMMARIES: dict[str, Summary] = {
     "qdrant_payload_index_create": lambda c: {"status": c["status"]},
     "qdrant_payload_schema_infer": _profile,
     "qdrant_points_count": lambda c: {"count": c["count"]},
+    "qdrant_collection_doctor": _doctor,
+    "qdrant_search_quality_eval": _quality,
 }
 
 
-async def _step(server: MCPServer[None], tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+async def _step(
+    server: MCPServer[None],
+    tool: str,
+    arguments: dict[str, Any],
+    summary: Summary | None = None,
+) -> dict[str, Any]:
     try:
         result = await server.call_tool(tool, arguments)
     except ToolError as exc:
         return {"tool": tool, "arguments": arguments, "ok": False, "error": str(exc)}
     assert isinstance(result, CallToolResult) and result.structured_content is not None, tool
     content = result.structured_content
-    return {"tool": tool, "arguments": arguments, "ok": True, "result": SUMMARIES[tool](content)}
+    summarize = summary or SUMMARIES[tool]
+    return {"tool": tool, "arguments": arguments, "ok": True, "result": summarize(content)}
 
 
 # --- the data ----------------------------------------------------------------------------------
@@ -136,6 +200,129 @@ _ARTICLES = [
 
 def _sparse(weights: dict[int, float]) -> dict[str, list[Any]]:
     return {"indices": list(weights), "values": list(weights.values())}
+
+
+_HELP_TEXTS = [
+    (
+        1,
+        "Reset your password",
+        "Forgot your password? Request a reset link by email and choose a new one.",
+    ),
+    (2, "Rotate API keys", "Generate a new API key and revoke the old one without downtime."),
+    (
+        3,
+        "Invoice and billing FAQ",
+        "Where to find your invoices, change the billing address or the payment card.",
+    ),
+    (
+        4,
+        "Set up single sign-on",
+        "Connect your identity provider with SAML so the team signs in with one account.",
+    ),
+    (5, "Export your data", "Download everything in your workspace as a CSV or JSON archive."),
+    (6, "Delete your account", "Close your account and permanently erase your data."),
+]
+
+
+async def text_search(server: MCPServer[None]) -> list[dict[str, Any]]:
+    name = "demo_help"
+    query = {"collection_name": name, "limit": 2, "with_payload": ["title"]}
+    return [
+        await _step(
+            server,
+            "qdrant_collection_create",
+            {"collection_name": name, "text_model": TEXT_MODEL, "text_language": "english"},
+        ),
+        await _step(
+            server,
+            "qdrant_points_upsert",
+            {
+                "collection_name": name,
+                "points": [
+                    {"id": point_id, "text": f"{title}. {body}", "payload": {"title": title}}
+                    for point_id, title, body in _HELP_TEXTS
+                ],
+            },
+        ),
+        await _step(
+            server,
+            "qdrant_query",
+            {**query, "query_text": "I can't log in, I lost my credentials"},
+            _ranked,
+        ),
+        await _step(
+            server, "qdrant_query", {**query, "query_text": "olvidé mi contraseña"}, _ranked
+        ),
+        await _step(server, "qdrant_query", {**query, "bm25_query": "invoice card"}, _ranked),
+        await _step(
+            server,
+            "qdrant_query",
+            {
+                **query,
+                "fusion": "rrf",
+                "prefetch": [
+                    {"query_text": "how do I sign in with my company account", "limit": 6},
+                    {"bm25_query": "account", "limit": 6},
+                ],
+            },
+            _ranked,
+        ),
+    ]
+
+
+async def search_advisor(
+    server: MCPServer[None], client: AsyncQdrantClient
+) -> list[dict[str, Any]]:
+    name = "demo_tune"
+    # One indexing thread and one segment: a parallel HNSW build differs between runs (verified:
+    # recall 0.963 / 0.97 / 0.975 on the same data), which would make this recording flaky.
+    create = await _step(
+        server,
+        "qdrant_collection_create",
+        {
+            "collection_name": name,
+            "vector_size": 16,
+            "distance": "Cosine",
+            "quantization_config": {"scalar": {"type": "int8", "always_ram": True}},
+            "hnsw_config": {"max_indexing_threads": 1},
+            "optimizers_config": {
+                "indexing_threshold": 1,
+                "default_segment_number": 1,
+                "max_optimization_threads": 1,
+            },
+        },
+    )
+    rnd = random.Random(42)
+    points = [{"id": i, "vector": [round(rnd.random(), 4) for _ in range(16)]} for i in range(200)]
+    # Through the MCP server like every other call, but not shown: 200 vectors aren't readable.
+    await _step(server, "qdrant_points_upsert", {"collection_name": name, "points": points})
+    for _ in range(240):
+        info = await client.get_collection(name)
+        if info.status == CollectionStatus.GREEN and info.indexed_vectors_count == len(points):
+            break
+        await asyncio.sleep(0.5)
+    else:
+        raise RuntimeError(f"{name} was not fully indexed in time")
+    doctor = await _step(server, "qdrant_collection_doctor", {"collection_name": name})
+    # A deep copy: the recorded doctor step must keep the placeholder it really returned.
+    [aliases] = [f for f in doctor["result"]["findings"] if f["rule"] == "aliases"]
+    fix = copy.deepcopy(aliases["fix"]["arguments"])
+    fix["operations"][0]["create_alias"]["alias_name"] = "demo_tune_live"
+    return [
+        create,
+        doctor,
+        await _step(server, "qdrant_alias_update", fix),
+        await _step(server, "qdrant_collection_doctor", {"collection_name": name}),
+        await _step(
+            server,
+            "qdrant_search_quality_eval",
+            {
+                "collection_name": name,
+                "sample": 200,
+                "variants": [{}, {"quantization": {"rescore": True, "oversampling": 2.0}}],
+            },
+        ),
+    ]
 
 
 async def hybrid_search(server: MCPServer[None]) -> list[dict[str, Any]]:
@@ -342,6 +529,8 @@ async def record() -> dict[str, Any]:
     try:
         await _cleanup(client)
         scenarios = [
+            {"id": "text-search", "steps": await text_search(server)},
+            {"id": "search-advisor", "steps": await search_advisor(server, client)},
             {"id": "hybrid-search", "steps": await hybrid_search(server)},
             {"id": "zero-downtime-reindex", "steps": await zero_downtime_reindex(server)},
             {"id": "know-the-payload", "steps": await know_the_payload(server)},
@@ -360,7 +549,7 @@ async def record() -> dict[str, Any]:
 async def _cleanup(client: AsyncQdrantClient) -> None:
     # Deleting an alias that doesn't exist is a verified no-op, so this is safe to repeat.
     await client.update_collection_aliases(
-        [DeleteAliasOperation(delete_alias=DeleteAlias(alias_name="demo_docs"))]
+        [DeleteAliasOperation(delete_alias=DeleteAlias(alias_name=a)) for a in DEMO_ALIASES]
     )
     for name in DEMO_COLLECTIONS:
         await client.delete_collection(name)
