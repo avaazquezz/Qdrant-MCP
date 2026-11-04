@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, cast
 
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 from qdrant_client import AsyncQdrantClient
@@ -17,10 +18,12 @@ from qdrant_client.http.models import (
     VectorStruct,
 )
 
+from mcp_qdrant import embeddings
 from mcp_qdrant.tools.errors import call_qdrant
 from mcp_qdrant.tools.points_shared import PointVectorValue, build_points_selector, page_offset
 from mcp_qdrant.tools.registry import ToolRegistry
 from mcp_qdrant.tools.schemas import FilterInput, StrictInput
+from mcp_qdrant.tools.text_shared import read_contract
 
 _UPSERT_ANNOTATIONS = ToolAnnotations(
     title="Upsert Qdrant points",
@@ -62,12 +65,43 @@ _COUNT_ANNOTATIONS = ToolAnnotations(
 
 
 class PointInput(StrictInput):
-    """A point to upsert: id + vector(s) + payload. See `PointVectorValue`
-    for the accepted vector shapes."""
+    """A point to upsert: id + payload + exactly one of `vector` (see
+    `PointVectorValue` for the accepted shapes) or `text` (embedded with the
+    collection's declared models)."""
 
     id: int | str
-    vector: PointVectorValue
+    vector: PointVectorValue | None = None
+    text: str | None = None
     payload: dict[str, Any] | None = None
+
+
+async def _embed_text_points(
+    client: AsyncQdrantClient, collection_name: str, points: list[PointInput]
+) -> list[PointStruct]:
+    """Every point given as `text` gets one vector per model the collection declares (the same
+    text, embedded once per model) and the text itself in the declared payload field."""
+    texts = [p.text for p in points if p.text is not None]
+    if not texts:
+        return []
+    contract = await read_contract(client, collection_name)
+    if contract is None:
+        raise ToolError(
+            f"Collection {collection_name!r} declares no text setup, so `text` can't be "
+            "embedded: send `vector` instead, or declare the model with "
+            "`qdrant_collection_update` (`text_models`)."
+        )
+    # No models (a keyword-only collection, see `text_language`): the text is only stored.
+    by_vector = {
+        name: await embeddings.embed(model, texts, is_query=False)
+        for name, model in contract.models.items()
+    }
+    structs = []
+    for i, point in enumerate(p for p in points if p.text is not None):
+        vectors = {name: embedded[i] for name, embedded in by_vector.items()}
+        vector = vectors[""] if list(vectors) == [""] else vectors  # "" = the unnamed vector
+        payload = {**(point.payload or {}), contract.text_field: point.text}
+        structs.append(PointStruct(id=point.id, vector=cast(VectorStruct, vector), payload=payload))
+    return structs
 
 
 class PointsGetResult(BaseModel):
@@ -87,13 +121,16 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         update_mode: Literal["upsert", "insert_only", "update_only"] | None = None,
         update_filter: FilterInput | None = None,
     ) -> UpdateResult:
-        """Insert or replace points (id + vector + payload) in a collection.
+        """Insert or replace points (id + vector or text + payload) in a collection.
 
         `vector` matches the collection's vector config: a plain list for a
         single unnamed vector; a list of lists for an unnamed multivector;
         or a dict keyed by vector name for named vectors, where each value
         is a dense list, a multivector, or a sparse vector
-        (`{"indices": [...], "values": [...]}`).
+        (`{"indices": [...], "values": [...]}`). Give `text` instead of `vector`
+        to have it embedded with every model the collection declares (see
+        `qdrant_collection_create`'s `text_model`) and stored in its text field
+        — one text is one point, nothing is split. Needs the `embeddings` extra.
 
         `update_mode` makes the write conditional: `insert_only` never
         overwrites an existing id, `update_only` never creates a new one
@@ -107,16 +144,24 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         Example: {"collection_name": "docs", "points": [
             {"id": 1, "vector": [0.1, 0.2, 0.3, 0.4], "payload": {"city": "ny"}}
         ]}
+        Example (text): {"collection_name": "notes", "points": [
+            {"id": 1, "text": "Grants for young people's housing", "payload": {"year": 2026}}
+        ]}
         Example (named dense + sparse): {"collection_name": "docs", "points": [
             {"id": 1, "vector": {"dense": [0.1, 0.2, 0.3, 0.4],
                 "sparse": {"indices": [1, 7], "values": [0.5, 0.2]}}}
         ]}
         """
+        if any((p.vector is None) == (p.text is None) for p in points):
+            raise ToolError("Each point needs exactly one of `vector` or `text`.")
         # PointInput.vector is a narrower union than PointStruct.vector (excludes
         # Document/Image/InferenceObject); dict value types are invariant in mypy,
         # so a plain assignment doesn't widen it.
-        structs = [
-            PointStruct(id=p.id, vector=cast(VectorStruct, p.vector), payload=p.payload)
+        embedded = iter(await _embed_text_points(client, collection_name, points))
+        structs = [  # input order kept: with a repeated id, the last one wins as usual
+            next(embedded)
+            if p.text is not None
+            else PointStruct(id=p.id, vector=cast(VectorStruct, p.vector), payload=p.payload)
             for p in points
         ]
         mode = UpdateMode(update_mode) if update_mode is not None else None

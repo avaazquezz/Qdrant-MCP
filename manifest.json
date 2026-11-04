@@ -17,7 +17,7 @@
     "entry_point": "src/mcp_qdrant/cli.py",
     "mcp_config": {
       "command": "uv",
-      "args": ["run", "--directory", "${__dirname}", "mcp-qdrant"],
+      "args": ["run", "--directory", "${__dirname}", "--extra", "embeddings", "mcp-qdrant"],
       "env": {
         "QDRANT_URL": "${user_config.qdrant_url}",
         "QDRANT_API_KEY": "${user_config.qdrant_api_key}",

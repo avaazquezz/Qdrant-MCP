@@ -50,6 +50,7 @@ from mcp_qdrant.tools.query_shared import (
 )
 from mcp_qdrant.tools.registry import ToolRegistry
 from mcp_qdrant.tools.schemas import FilterInput, SearchParamsInput, StrictInput
+from mcp_qdrant.tools.text_shared import TextResolver
 
 RecommendStrategyName = Literal["average_vector", "best_score", "sum_scores"]
 
@@ -130,6 +131,8 @@ class QuerySpec(StrictInput):
     `consistency` (those apply to the whole batch)."""
 
     query_vector: VectorOrId | None = None
+    query_text: str | None = None
+    bm25_query: str | None = None
     fusion: FusionInput | None = None
     prefetch: list[PrefetchInput] | None = None
     mmr: MmrInput | None = None
@@ -147,6 +150,7 @@ class QuerySpec(StrictInput):
     with_vectors: bool = False
 
     def to_request(self) -> QueryRequest:
+        """Build the request; `query_text` must already be resolved (see `TextResolver`)."""
         return QueryRequest(
             query=build_query_value(
                 self.query_vector,
@@ -155,6 +159,7 @@ class QuerySpec(StrictInput):
                 formula=self.formula,
                 order_by=self.order_by,
                 sample=self.sample,
+                bm25_query=self.bm25_query,
             ),
             using=self.using,
             prefetch=build_prefetch_list(self.prefetch),
@@ -274,8 +279,9 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
     ) -> list[QueryResponse]:
         """Run multiple independent queries against one collection in a
         single round trip — each item takes every query mode and tuning
-        parameter of `qdrant_query` (plain vector, fusion over prefetch, MMR,
-        formula, order_by, sample, search_params, score_threshold, offset);
+        parameter of `qdrant_query` (vector, `query_text`, `bm25_query`, fusion
+        over prefetch, MMR, formula, order_by, sample, search_params,
+        score_threshold, offset);
         `timeout_seconds` and `consistency` apply to the whole batch.
 
         Example: {"collection_name": "docs", "queries": [
@@ -284,7 +290,15 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         ]}
         """
         registry.check_limit(sum(q.limit for q in queries), "the total limit of all queries")
-        requests = [q.to_request() for q in queries]
+        text = TextResolver(client, collection_name)
+        requests = [
+            q.model_copy(
+                update=await text.resolved_fields(
+                    q.query_vector, q.query_text, q.bm25_query, q.using, q.prefetch
+                )
+            ).to_request()
+            for q in queries
+        ]
         return await call_qdrant(
             lambda: client.query_batch_points(
                 collection_name,
@@ -298,6 +312,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         collection_name: str,
         group_by: str,
         query_vector: VectorOrId | None = None,
+        query_text: str | None = None,
+        bm25_query: str | None = None,
         fusion: FusionInput | None = None,
         prefetch: list[PrefetchInput] | None = None,
         mmr: MmrInput | None = None,
@@ -326,8 +342,17 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
             "query_vector": [0.1, 0.2, 0.3, 0.4], "group_size": 2}
         """
         registry.check_limit(limit * group_size, "limit × group_size")
+        text = TextResolver(client, collection_name)
+        query_vector, using = await text.resolve(query_vector, query_text, bm25_query, using)
+        prefetch = await text.resolve_prefetch(prefetch)
         query = build_query_value(
-            query_vector, fusion, mmr=mmr, formula=formula, order_by=order_by, sample=sample
+            query_vector,
+            fusion,
+            mmr=mmr,
+            formula=formula,
+            order_by=order_by,
+            sample=sample,
+            bm25_query=bm25_query,
         )
         return await call_qdrant(
             lambda: client.query_points_groups(

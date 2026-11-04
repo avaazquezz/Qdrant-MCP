@@ -20,6 +20,11 @@ dependencies = [
     "uvicorn>=0.52.4,<1",
 ]
 
+[project.optional-dependencies]
+# Local text embeddings (`query_text`, `text` in upserts). Through qdrant-client's own extra so
+# the fastembed version stays the one qdrant-client is tested with.
+embeddings = ["qdrant-client[fastembed]==1.20.0"]
+
 [project.scripts]
 mcp-qdrant = "mcp_qdrant.cli:main"
 
