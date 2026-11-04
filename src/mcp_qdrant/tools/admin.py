@@ -30,7 +30,7 @@ from qdrant_client.http.models import (
     RenameAliasOperation,
 )
 
-from mcp_qdrant.tools.errors import call_qdrant
+from mcp_qdrant.tools.errors import call_qdrant, require_result
 from mcp_qdrant.tools.registry import ToolRegistry
 
 AliasOperationInput = CreateAliasOperation | DeleteAliasOperation | RenameAliasOperation
@@ -171,8 +171,7 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
                 completed_limit=cast(int, completed_limit),
             )
         )
-        assert response.result is not None
-        return response.result
+        return require_result(response.result, "optimization progress")
 
     registry.register(qdrant_alias_list, toolset="admin", annotations=_ALIAS_LIST_ANNOTATIONS)
     registry.register(

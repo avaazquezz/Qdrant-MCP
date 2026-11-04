@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 
+import httpx
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import ResponseHandlingException
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from mcp_qdrant.config import Settings
 
@@ -30,8 +31,19 @@ def build_qdrant_client(settings: Settings) -> AsyncQdrantClient:
     )
 
 
+# Failures where the request never reached Qdrant, so nothing can have been
+# applied. qdrant-client wraps *every* transport failure in ResponseHandlingException
+# — read timeouts and unparseable 200 responses included — and retrying one of those
+# can repeat a write the server already did (e.g. create a slow snapshot again).
+NEVER_SENT = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+
+
+def request_never_sent(exc: BaseException) -> bool:
+    return isinstance(exc, ResponseHandlingException) and isinstance(exc.source, NEVER_SENT)
+
+
 qdrant_retry = retry(
-    retry=retry_if_exception_type(ResponseHandlingException),
+    retry=retry_if_exception(request_never_sent),
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=0.5, min=0.5, max=4),
     reraise=True,
@@ -43,8 +55,8 @@ async def ping(client: AsyncQdrantClient) -> int:
     """Cheap read-only connectivity probe: list collections, return the count.
 
     get_collections() is the lightest authenticated round-trip the API
-    offers. Retries only ResponseHandlingException (transport-level failures:
-    connection refused, timeout) — an UnexpectedResponse (bad API key, 5xx
+    offers. Retries only failures where the request never left (connection
+    refused, connect/pool timeout) — an UnexpectedResponse (bad API key, 5xx
     from a reachable server) is not retried, because retrying won't fix it.
     """
     response = await client.get_collections()
