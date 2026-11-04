@@ -837,6 +837,25 @@ Lo que queda, y lo que de verdad reduce lo que lee el modelo:
 - Documentado: la fix del doctor puede apuntar a una tool no habilitada (modo solo lectura o toolset
   sin cargar).
 
+### Fase 21 — `feat/guidance` → v2.11.0
+**Primero medir** (servidor sonda + `claude -p`, Claude Code 2.1.318): las `instructions` del
+servidor llegan al modelo (las citó literalmente), así que cuestan contexto en *cada* conversación;
+los prompts funcionan como `/mcp__<servidor>__<prompt> args`, con argumentos posicionales.
+
+- `instructions` dinámicas según toolsets y solo lectura (≤150 palabras, con test). Un test
+  invariante recorre todas las combinaciones de toolsets y modos y comprueba que ni las
+  instrucciones ni los prompts nombran una tool que el servidor no tenga — en su primera ejecución
+  cazó que nombraban `qdrant_query` y `qdrant_collection_info` sin `core` activo.
+- Tres prompts, no cuatro: `audit-collection` se descartó (sería "ejecuta el doctor y resume", que
+  ya es el doctor). Cada uno se registra solo si sus tools existen y el servidor escribe.
+- `title` de nivel superior en las 58 tools, desde la anotación, en el punto único del registro.
+- Verificado antes de escribir `tune_search`: HNSW y cuantización se cambian **en caliente** con
+  `qdrant_collection_update` (la colección pasa a amarilla, sigue respondiendo y vuelve a verde), así
+  que el prompt reserva copy + alias para lo que `update` no puede cambiar.
+- Prueba de punta a punta: `/mcp__qdrant__tune_search` en Claude Code ejecutó el doctor, midió 7
+  variantes, atribuyó la pérdida de recall (0,95) a la cuantización (no a `hnsw_ef`) y propuso el
+  cambio mínimo y reversible con sus números, esperando aprobación.
+
 ## Versionado
 
 | Versión | Fase cerrada |
@@ -863,6 +882,7 @@ Lo que queda, y lo que de verdad reduce lo que lee el modelo:
 | v2.8.0 | 18 — búsqueda por texto (semántica, BM25, híbrida) |
 | v2.9.0 | 19 — menos contexto: selección de claves del payload |
 | v2.10.0 | 20 — asesor: doctor y evaluación de calidad de búsqueda |
+| v2.11.0 | 21 — guía: instructions, prompts MCP, títulos |
 
 ---
 *Catálogo de endpoints verificado contra `api.qdrant.tech/master/llms.txt` y el README de

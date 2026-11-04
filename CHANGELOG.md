@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.0] - 2026-11-04
+
+Guidance: what the server tells the model beyond each tool. Measured first in a real Claude Code
+session against a probe server: the server's `instructions` reach the model (it quoted them), and
+prompts run as `/mcp__<server>__<prompt> args`.
+
+### Added
+- **MCP prompts** for whole workflows: `tune_search` (doctor → recall/latency of a few variants →
+  smallest change, then waits for approval), `zero_downtime_reindex` (new collection, copy,
+  measure, switch the alias, keep the old one) and `text_search_setup` (declare the embedding
+  model of an existing collection, add a BM25 index, try the three kinds of search). Each is
+  registered only when its tools are enabled and the server can write. Verified end to end:
+  `/mcp__qdrant__tune_search` in Claude Code traced a recall loss of 0.95 to quantization and
+  proposed the fix with its numbers before changing anything.
+- **Server `instructions`**: a short orientation (≤150 words) built from the enabled toolsets —
+  where a collection's text models are declared, how to search by text, how to ask for fewer
+  payload keys, and the advisor tools.
+- Every tool now has a top-level `title` (its annotation title), which clients show.
+
 ## [2.10.0] - 2026-11-04
 
 A search advisor, in the `admin` toolset: Qdrant expertise the model no longer has to carry.

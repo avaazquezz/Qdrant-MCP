@@ -74,4 +74,7 @@ class ToolRegistry:
                 fn.__name__,
             )
             return
-        self._server.add_tool(fn, name=name, description=description, annotations=annotations)
+        # The annotation title doubles as the tool's top-level `title`, which clients show.
+        self._server.add_tool(
+            fn, name=name, title=annotations.title, description=description, annotations=annotations
+        )
