@@ -67,7 +67,8 @@ _QUOTAS_GET_ANNOTATIONS = ToolAnnotations(
 _QUOTAS_SET_ANNOTATIONS = ToolAnnotations(
     title="Set Qdrant server quotas",
     read_only_hint=False,
-    destructive_hint=False,
+    # Omitted fields are reset, so a "partial" update can switch enforcement off.
+    destructive_hint=True,
     idempotent_hint=True,
     open_world_hint=True,
 )
@@ -102,8 +103,10 @@ def _require_qdrant_url(qdrant_url: str | None) -> str:
 
 def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str | None) -> None:
     async def qdrant_telemetry(details_level: int | None = None) -> TelemetryData:
-        """Server-wide telemetry: build info, per-collection stats, request
-        counters, memory and hardware usage. Not tied to any one collection.
+        """Server-wide telemetry: build info, the number of collections and
+        request counters by default; pass `details_level` 1 or more for
+        per-collection stats, memory and hardware usage (verified: they are
+        null at the default level). Not tied to any one collection.
 
         Example: {}
         """
@@ -141,8 +144,10 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient, qdrant_url: str 
         max_disk_usage_percent: int | None = None,
         release_margin_percent: int | None = None,
     ) -> bool:
-        """Update server-wide resource quotas. Only the fields you pass are
-        changed; omitted ones keep their current value.
+        """Replace the server-wide resource quotas. The whole config is
+        replaced, not merged (verified): every field you omit is reset — limits
+        become unset and `enabled` becomes false. Read the current values with
+        `qdrant_quotas_get` and pass every field you want to keep.
 
         Example: {"enabled": true, "max_resident_memory_percent": 90}
         """

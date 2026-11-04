@@ -98,7 +98,8 @@ def register(registry: ToolRegistry, client: AsyncQdrantClient) -> None:
         `update_mode` makes the write conditional: `insert_only` never
         overwrites an existing id, `update_only` never creates a new one
         (default `upsert` does both). `update_filter` only overwrites existing
-        points whose current payload matches the filter. `wait=false`
+        points whose current payload matches the filter; ids that don't exist
+        yet are inserted regardless (verified). `wait=false`
         returns before the write is applied.
 
         Fails with a clear error if the collection doesn't exist.

@@ -58,7 +58,7 @@
   {
     "name": "qdrant_points_upsert",
     "toolset": "core",
-    "description": "Insert or replace points (id + vector + payload) in a collection.\n\n`vector` matches the collection's vector config: a plain list for a single unnamed vector; a list of lists for an unnamed multivector; or a dict keyed by vector name for named vectors, where each value is a dense list, a multivector, or a sparse vector (`{\"indices\": [...], \"values\": [...]}`).\n\n`update_mode` makes the write conditional: `insert_only` never overwrites an existing id, `update_only` never creates a new one (default `upsert` does both). `update_filter` only overwrites existing points whose current payload matches the filter. `wait=false` returns before the write is applied.\n\nFails with a clear error if the collection doesn't exist.\n\nExample: {\"collection_name\": \"docs\", \"points\": [ {\"id\": 1, \"vector\": [0.1, 0.2, 0.3, 0.4], \"payload\": {\"city\": \"ny\"}} ]} Example (named dense + sparse): {\"collection_name\": \"docs\", \"points\": [ {\"id\": 1, \"vector\": {\"dense\": [0.1, 0.2, 0.3, 0.4], \"sparse\": {\"indices\": [1, 7], \"values\": [0.5, 0.2]}}} ]}",
+    "description": "Insert or replace points (id + vector + payload) in a collection.\n\n`vector` matches the collection's vector config: a plain list for a single unnamed vector; a list of lists for an unnamed multivector; or a dict keyed by vector name for named vectors, where each value is a dense list, a multivector, or a sparse vector (`{\"indices\": [...], \"values\": [...]}`).\n\n`update_mode` makes the write conditional: `insert_only` never overwrites an existing id, `update_only` never creates a new one (default `upsert` does both). `update_filter` only overwrites existing points whose current payload matches the filter; ids that don't exist yet are inserted regardless (verified). `wait=false` returns before the write is applied.\n\nFails with a clear error if the collection doesn't exist.\n\nExample: {\"collection_name\": \"docs\", \"points\": [ {\"id\": 1, \"vector\": [0.1, 0.2, 0.3, 0.4], \"payload\": {\"city\": \"ny\"}} ]} Example (named dense + sparse): {\"collection_name\": \"docs\", \"points\": [ {\"id\": 1, \"vector\": {\"dense\": [0.1, 0.2, 0.3, 0.4], \"sparse\": {\"indices\": [1, 7], \"values\": [0.5, 0.2]}}} ]}",
     "read_only": false,
     "destructive": true,
     "idempotent": true
@@ -98,7 +98,7 @@
   {
     "name": "qdrant_query",
     "toolset": "core",
-    "description": "Search a collection with Qdrant's unified Query API: vector similarity, hybrid fusion, multi-stage reranking, MMR diversity, payload-based score formulas, ordering by a payload field, or random sampling.\n\nExactly one query mode is required: - `query_vector` — nearest points to a dense vector, a multivector (list of vectors), a sparse vector (`{\"indices\": [...], \"values\": [...]}`), or a point id whose stored vector is reused. It must match the vector selected with `using`. Add `mmr` (`diversity` 0..1, `candidates_limit`) to re-order the nearest candidates for diversity: set `candidates_limit` well above `limit` (it defaults to `limit`, which leaves MMR nothing to choose from). `offset` pages through the MMR ranking on Qdrant 1.20 (verified; older servers applied it inside the `limit` re-ranked results, so raise `limit` there instead). - `fusion` + 2+ `prefetch` stages — combine retrieval strategies: `\"rrf\"` (Reciprocal Rank Fusion), `\"dbsf\"` (Distribution-Based Score Fusion), or `{\"method\": \"rrf\", \"weights\": [2, 1], \"k\": 60}` for RRF with one weight per stage (a count that doesn't match the stages is rejected by Qdrant). - `formula` — rescore the results of `prefetch` stages (required: a formula without prefetch is rejected). `{\"expression\": ..., \"defaults\": {...}}`. An expression is a number; a variable (`\"$score\"` is the prefetch score, any other string is a payload key); a payload condition (e.g. `{\"key\": \"city\", \"match\": {\"value\": \"sf\"}}`, worth 1 if it matches, else 0); or exactly one operator object: `{\"sum\": [...]}`, `{\"mult\": [...]}`, `{\"neg\": e}`, `{\"abs\": e}`, `{\"div\": {\"left\": e, \"right\": e}}`, `{\"sqrt\": e}`, `{\"pow\": {\"base\": e, \"exponent\": e}}`, `{\"exp\": e}`, `{\"ln\": e}`, `{\"log10\": e}`, `{\"geo_distance\": {\"origin\": {\"lat\": .., \"lon\": ..}, \"to\": \"payload.key\"}}`, `{\"datetime\": \"2026-01-01T00:00:00Z\"}`, `{\"datetime_key\": \"payload.key\"}`, and the decays `{\"exp_decay\" | \"gauss_decay\" | \"lin_decay\": {\"x\": e, \"target\": e, \"scale\": number, \"midpoint\": number}}`. A payload key a point lacks needs a value in `defaults`, or Qdrant rejects the query. - `order_by` — sort by a payload field instead of by similarity: a key or `{\"key\": ..., \"direction\": \"asc\"|\"desc\", \"start_from\": value}`. The key needs a payload range index (integer, float or datetime). - `sample: \"random\"` — random points.\n\nA `prefetch` stage is itself a `query_vector` query or a `fusion` of its own nested `prefetch` stages, so pipelines nest: fuse dense+sparse in one stage, then rerank with a multivector. `using` selects a named vector; `lookup_from` resolves `query_vector` from a point id in another collection.\n\nTuning: `search_params` (`hnsw_ef`, `exact` for brute force, `quantization`: `ignore`/`rescore`/`oversampling`, `indexed_only`, `acorn`), `score_threshold` (drop weaker hits), `limit` + `offset` (paging; `limit` is capped per call by the server's QDRANT_MCP_MAX_LIMIT, 1000 by default — page with `offset` for more), `timeout_seconds` (server-side), and `consistency` (a replica count, or `\"majority\"`/`\"quorum\"`/`\"all\"`; only meaningful on a replicated deployment). Fails with a clear error if the collection doesn't exist.\n\nExample (plain): {\"collection_name\": \"docs\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 5} Example (hybrid): {\"collection_name\": \"docs\", \"fusion\": \"rrf\", \"prefetch\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"using\": \"dense\", \"limit\": 20}, {\"query_vector\": {\"indices\": [1, 7], \"values\": [0.5, 0.2]}, \"using\": \"sparse\", \"limit\": 20} ], \"limit\": 5} Example (diverse results): {\"collection_name\": \"docs\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"mmr\": {\"diversity\": 0.5, \"candidates_limit\": 50}, \"limit\": 5} Example (boost one city): {\"collection_name\": \"docs\", \"prefetch\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 50} ], \"formula\": {\"expression\": {\"sum\": [\"$score\", {\"mult\": [0.5, {\"key\": \"city\", \"match\": {\"value\": \"sf\"}}]}]}}, \"limit\": 5} Example (cheapest first): {\"collection_name\": \"docs\", \"order_by\": {\"key\": \"price\", \"direction\": \"asc\"}, \"limit\": 5}",
+    "description": "Search a collection with Qdrant's unified Query API: vector similarity, hybrid fusion, multi-stage reranking, MMR diversity, payload-based score formulas, ordering by a payload field, or random sampling.\n\nExactly one query mode is required: - `query_vector` — nearest points to a dense vector, a multivector (list of vectors), a sparse vector (`{\"indices\": [...], \"values\": [...]}`), or a point id whose stored vector is reused (that point itself is left out of the results). It must match the vector selected with `using`. Add `mmr` (`diversity` 0..1, `candidates_limit`) to re-order the nearest candidates for diversity: set `candidates_limit` well above `limit` (it defaults to `limit`, which leaves MMR nothing to choose from). `offset` pages through the MMR ranking on Qdrant 1.20 (verified; older servers applied it inside the `limit` re-ranked results, so raise `limit` there instead). - `fusion` + 2+ `prefetch` stages — combine retrieval strategies: `\"rrf\"` (Reciprocal Rank Fusion), `\"dbsf\"` (Distribution-Based Score Fusion), or `{\"method\": \"rrf\", \"weights\": [2, 1], \"k\": 60}` for RRF with one weight per stage (a count that doesn't match the stages is rejected by Qdrant). - `formula` — rescore the results of `prefetch` stages (required: a formula without prefetch is rejected). `{\"expression\": ..., \"defaults\": {...}}`. An expression is a number; a variable (`\"$score\"` is the prefetch score, any other string is a payload key); a payload condition (e.g. `{\"key\": \"city\", \"match\": {\"value\": \"sf\"}}`, worth 1 if it matches, else 0); or exactly one operator object: `{\"sum\": [...]}`, `{\"mult\": [...]}`, `{\"neg\": e}`, `{\"abs\": e}`, `{\"div\": {\"left\": e, \"right\": e}}`, `{\"sqrt\": e}`, `{\"pow\": {\"base\": e, \"exponent\": e}}`, `{\"exp\": e}`, `{\"ln\": e}`, `{\"log10\": e}`, `{\"geo_distance\": {\"origin\": {\"lat\": .., \"lon\": ..}, \"to\": \"payload.key\"}}`, `{\"datetime\": \"2026-01-01T00:00:00Z\"}`, `{\"datetime_key\": \"payload.key\"}`, and the decays `{\"exp_decay\" | \"gauss_decay\" | \"lin_decay\": {\"x\": e, \"target\": e, \"scale\": number, \"midpoint\": number}}`. A payload key a point lacks needs a value in `defaults`, or Qdrant rejects the query. - `order_by` — sort by a payload field instead of by similarity: a key or `{\"key\": ..., \"direction\": \"asc\"|\"desc\", \"start_from\": value}`. The key needs a payload range index (integer, float or datetime). - `sample: \"random\"` — random points.\n\nA `prefetch` stage is itself a `query_vector` query or a `fusion` of its own nested `prefetch` stages, so pipelines nest: fuse dense+sparse in one stage, then rerank with a multivector. `using` selects a named vector; `lookup_from` resolves `query_vector` from a point id in another collection.\n\nTuning: `search_params` (`hnsw_ef`, `exact` for brute force, `quantization`: `ignore`/`rescore`/`oversampling`, `indexed_only`, `acorn`), `score_threshold` (drop weaker hits), `limit` + `offset` (paging; `limit` is capped per call by the server's QDRANT_MCP_MAX_LIMIT, 1000 by default — page with `offset` for more), `timeout_seconds` (server-side), and `consistency` (a replica count, or `\"majority\"`/`\"quorum\"`/`\"all\"`; only meaningful on a replicated deployment). Fails with a clear error if the collection doesn't exist.\n\nExample (plain): {\"collection_name\": \"docs\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 5} Example (hybrid): {\"collection_name\": \"docs\", \"fusion\": \"rrf\", \"prefetch\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"using\": \"dense\", \"limit\": 20}, {\"query_vector\": {\"indices\": [1, 7], \"values\": [0.5, 0.2]}, \"using\": \"sparse\", \"limit\": 20} ], \"limit\": 5} Example (diverse results): {\"collection_name\": \"docs\", \"query_vector\": [0.1, 0.2, 0.3, 0.4], \"mmr\": {\"diversity\": 0.5, \"candidates_limit\": 50}, \"limit\": 5} Example (boost one city): {\"collection_name\": \"docs\", \"prefetch\": [ {\"query_vector\": [0.1, 0.2, 0.3, 0.4], \"limit\": 50} ], \"formula\": {\"expression\": {\"sum\": [\"$score\", {\"mult\": [0.5, {\"key\": \"city\", \"match\": {\"value\": \"sf\"}}]}]}}, \"limit\": 5} Example (cheapest first): {\"collection_name\": \"docs\", \"order_by\": {\"key\": \"price\", \"direction\": \"asc\"}, \"limit\": 5}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -122,7 +122,7 @@
   {
     "name": "qdrant_recommend",
     "toolset": "search",
-    "description": "Find points similar to a set of positive examples and dissimilar to a set of negative ones (vectors or point ids) — Qdrant's recommendation API. Requires at least one of `positive`/`negative`; the server rejects an empty request with a clear error. Examples may be dense, multi- or sparse vectors, matching `using`.\n\nTakes the same tuning parameters as `qdrant_query`: `search_params`, `score_threshold`, `offset`, `timeout_seconds`, `consistency`.\n\nExample: {\"collection_name\": \"docs\", \"positive\": [1, 2], \"negative\": [7]}",
+    "description": "Find points similar to a set of positive examples and dissimilar to a set of negative ones (vectors or point ids) — Qdrant's recommendation API. With the default `average_vector` strategy at least one `positive` example is required; negative-only needs `strategy` `best_score` or `sum_scores` (verified). An empty request is rejected with a clear error. Examples may be dense, multi- or sparse vectors, matching `using`.\n\nTakes the same tuning parameters as `qdrant_query`: `search_params`, `score_threshold`, `offset`, `timeout_seconds`, `consistency`.\n\nExample: {\"collection_name\": \"docs\", \"positive\": [1, 2], \"negative\": [7]}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -178,7 +178,7 @@
   {
     "name": "qdrant_payload_set",
     "toolset": "payload",
-    "description": "Merge fields into the payload of selected points — exactly one of `ids`/`points_filter`. Existing keys not in `payload` are kept. `key` sets a nested sub-field (e.g. `\"metadata.author\"`) instead of merging at the payload root.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1], \"payload\": {\"city\": \"ny\"}}",
+    "description": "Merge fields into the payload of selected points — exactly one of `ids`/`points_filter`. Existing keys not in `payload` are kept. `key` sets a nested sub-field (e.g. `\"metadata.author\"`) instead of merging at the payload root. An id that doesn't exist fails the whole call (\"No point with id … found\"), yet the ids that do exist in it are still written (verified) — re-read them before retrying. A filter that matches nothing is not an error.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1], \"payload\": {\"city\": \"ny\"}}",
     "read_only": false,
     "destructive": false,
     "idempotent": true
@@ -186,7 +186,7 @@
   {
     "name": "qdrant_payload_overwrite",
     "toolset": "payload",
-    "description": "Replace the entire payload of selected points with `payload` — exactly one of `ids`/`points_filter`. Unlike `qdrant_payload_set`, existing keys not in `payload` are dropped.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1], \"payload\": {\"city\": \"ny\"}}",
+    "description": "Replace the entire payload of selected points with `payload` — exactly one of `ids`/`points_filter`. Unlike `qdrant_payload_set`, existing keys not in `payload` are dropped. An id that doesn't exist fails the whole call (\"No point with id … found\"), yet the ids that do exist in it are still written (verified) — re-read them before retrying. A filter that matches nothing is not an error.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1], \"payload\": {\"city\": \"ny\"}}",
     "read_only": false,
     "destructive": true,
     "idempotent": true
@@ -194,7 +194,7 @@
   {
     "name": "qdrant_payload_delete",
     "toolset": "payload",
-    "description": "Delete specific payload keys from selected points — exactly one of `ids`/`points_filter`. Other keys are untouched.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1], \"keys\": [\"city\"]}",
+    "description": "Delete specific payload keys from selected points — exactly one of `ids`/`points_filter`. Other keys are untouched. An id that doesn't exist fails the whole call (\"No point with id … found\"), yet the ids that do exist in it are still written (verified) — re-read them before retrying. A filter that matches nothing is not an error.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1], \"keys\": [\"city\"]}",
     "read_only": false,
     "destructive": true,
     "idempotent": true
@@ -202,7 +202,7 @@
   {
     "name": "qdrant_payload_clear",
     "toolset": "payload",
-    "description": "Wipe the entire payload of selected points, keeping their vectors — exactly one of `ids`/`points_filter`.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1]}",
+    "description": "Wipe the entire payload of selected points, keeping their vectors — exactly one of `ids`/`points_filter`. An id that doesn't exist fails the whole call (\"No point with id … found\"), yet the ids that do exist in it are still written (verified) — re-read them before retrying. A filter that matches nothing is not an error.\n\nExample: {\"collection_name\": \"docs\", \"ids\": [1]}",
     "read_only": false,
     "destructive": true,
     "idempotent": true
@@ -210,7 +210,7 @@
   {
     "name": "qdrant_payload_facet",
     "toolset": "payload",
-    "description": "Count distinct values of a payload field across the collection (or a filtered subset) — e.g. how many points per `city`. `exact` trades speed for an exact count instead of an approximation.\n\nExample: {\"collection_name\": \"docs\", \"key\": \"city\", \"limit\": 20}",
+    "description": "Count distinct values of a payload field across the collection (or a filtered subset) — e.g. how many points per `city`. `exact` trades speed for an exact count instead of an approximation. The field needs a `keyword`, `integer`, `uuid` or `bool` payload index; without one Qdrant answers \"No appropriate index for faceting\".\n\nExample: {\"collection_name\": \"docs\", \"key\": \"city\", \"limit\": 20}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -218,9 +218,9 @@
   {
     "name": "qdrant_payload_index_create",
     "toolset": "payload",
-    "description": "Create a payload index on `field_name`, speeding up filters that use it. `field_schema` can be a simple type name (\"keyword\", \"integer\", \"float\", \"geo\", \"text\", \"bool\", \"datetime\", \"uuid\") or a detailed params object (e.g. a `text` index with a specific tokenizer, or a `keyword` index marked `is_tenant`).\n\nExample: {\"collection_name\": \"docs\", \"field_name\": \"city\", \"field_schema\": \"keyword\"}",
+    "description": "Create a payload index on `field_name`, speeding up filters that use it. `field_schema` can be a simple type name (\"keyword\", \"integer\", \"float\", \"geo\", \"text\", \"bool\", \"datetime\", \"uuid\") or a detailed params object (e.g. a `text` index with a specific tokenizer, or a `keyword` index marked `is_tenant`). If the field already has an index with another schema, it is replaced without warning (verified: integer → keyword drops its range filtering).\n\nExample: {\"collection_name\": \"docs\", \"field_name\": \"city\", \"field_schema\": \"keyword\"}",
     "read_only": false,
-    "destructive": false,
+    "destructive": true,
     "idempotent": true
   },
   {
@@ -258,7 +258,7 @@
   {
     "name": "qdrant_vectors_update",
     "toolset": "payload",
-    "description": "Replace the vector(s) of existing points by id — leaves their payload untouched. For a named-vector collection, `vector` is a dict keyed by vector name; for a single unnamed vector, pass a plain vector.\n\nExample: {\"collection_name\": \"docs\", \"points\": [ {\"id\": 1, \"vector\": [0.1, 0.2, 0.3, 0.4]} ]}",
+    "description": "Replace the vector(s) of existing points by id — leaves their payload untouched. For a named-vector collection, `vector` is a dict keyed by vector name; for a single unnamed vector, pass a plain vector. An id that doesn't exist fails the whole call (\"No point with id … found\"), yet the ids that do exist in it are still written (verified) — re-read them before retrying.\n\nExample: {\"collection_name\": \"docs\", \"points\": [ {\"id\": 1, \"vector\": [0.1, 0.2, 0.3, 0.4]} ]}",
     "read_only": false,
     "destructive": true,
     "idempotent": true
@@ -266,7 +266,7 @@
   {
     "name": "qdrant_vectors_delete",
     "toolset": "payload",
-    "description": "Remove specific named vectors from selected points, keeping their payload and other vectors — exactly one of `ids`/`points_filter`.\n\nExample: {\"collection_name\": \"docs\", \"vector_names\": [\"sparse\"], \"ids\": [1]}",
+    "description": "Remove specific named vectors from selected points, keeping their payload and other vectors — exactly one of `ids`/`points_filter`. An id that doesn't exist fails the whole call (\"No point with id … found\"), yet the ids that do exist in it are still written (verified) — re-read them before retrying. A filter that matches nothing is not an error.\n\nExample: {\"collection_name\": \"docs\", \"vector_names\": [\"sparse\"], \"ids\": [1]}",
     "read_only": false,
     "destructive": true,
     "idempotent": true
@@ -346,7 +346,7 @@
   {
     "name": "qdrant_snapshot_delete",
     "toolset": "snapshots",
-    "description": "Delete a collection snapshot, freeing its disk space on the server — does not touch the live collection.\n\nExample: {\"collection_name\": \"docs\", \"snapshot_name\": \"docs-....snapshot\"}",
+    "description": "Delete a collection snapshot, freeing its disk space on the server — does not touch the live collection. Fails if the snapshot doesn't exist.\n\nExample: {\"collection_name\": \"docs\", \"snapshot_name\": \"docs-....snapshot\"}",
     "read_only": false,
     "destructive": true,
     "idempotent": true
@@ -354,7 +354,7 @@
   {
     "name": "qdrant_snapshot_recover",
     "toolset": "snapshots",
-    "description": "Overwrite `collection_name` with the state captured in a snapshot — everything written since that snapshot is lost. Creates the collection if it doesn't exist.\n\n`location` must be reachable by the Qdrant **server itself**, not necessarily by whoever calls this tool: an HTTP(S) URL (e.g. from `qdrant_snapshot_download`) or a `file://` path on the server's own disk. If Qdrant runs behind Docker port-remapping or a reverse proxy, the URL the server needs may differ from the one used to reach it from outside — this tool does not try to guess that. `checksum` (SHA256) verifies integrity before recovering; `api_key` authenticates to a *remote* snapshot host, not this Qdrant instance. Allowed locations: `file://`, QDRANT_URL's own origin, and the origins the operator listed in QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS — anything else is refused before Qdrant is asked to fetch it.\n\nExample: {\"collection_name\": \"docs\", \"location\": \"http://localhost:6333/collections/docs/snapshots/docs-....snapshot\"}",
+    "description": "Restore the points (vectors and payload) captured in a snapshot into `collection_name` — points written since the snapshot are lost. On an existing collection, its current configuration (e.g. optimizer settings), payload indexes and aliases are kept, not rolled back to the snapshot's (verified). A missing collection is created with the snapshot's configuration.\n\n`location` must be reachable by the Qdrant **server itself**, not necessarily by whoever calls this tool: an HTTP(S) URL (e.g. from `qdrant_snapshot_download`) or a `file://` path on the server's own disk. If Qdrant runs behind Docker port-remapping or a reverse proxy, the URL the server needs may differ from the one used to reach it from outside — this tool does not try to guess that. `checksum` (SHA256) verifies integrity before recovering; `api_key` authenticates to a *remote* snapshot host, not this Qdrant instance. Allowed locations: `file://`, QDRANT_URL's own origin, and the origins the operator listed in QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS — anything else is refused before Qdrant is asked to fetch it.\n\nExample: {\"collection_name\": \"docs\", \"location\": \"http://localhost:6333/collections/docs/snapshots/docs-....snapshot\"}",
     "read_only": false,
     "destructive": true,
     "idempotent": true
@@ -370,7 +370,7 @@
   {
     "name": "qdrant_storage_snapshot_create",
     "toolset": "snapshots",
-    "description": "Create a snapshot of the whole storage (every collection and server config), not just one collection.\n\nExample: {}",
+    "description": "Create a snapshot of the whole storage: a snapshot of every collection plus the alias mapping (verified: no server configuration is included), not just one collection.\n\nExample: {}",
     "read_only": false,
     "destructive": false,
     "idempotent": false
@@ -386,7 +386,7 @@
   {
     "name": "qdrant_storage_snapshot_delete",
     "toolset": "snapshots",
-    "description": "Delete a full-storage snapshot, freeing its disk space.\n\nExample: {\"snapshot_name\": \"full-....snapshot\"}",
+    "description": "Delete a full-storage snapshot, freeing its disk space. Fails if the snapshot doesn't exist.\n\nExample: {\"snapshot_name\": \"full-....snapshot\"}",
     "read_only": false,
     "destructive": true,
     "idempotent": true
@@ -402,7 +402,7 @@
   {
     "name": "qdrant_telemetry",
     "toolset": "observability",
-    "description": "Server-wide telemetry: build info, per-collection stats, request counters, memory and hardware usage. Not tied to any one collection.\n\nExample: {}",
+    "description": "Server-wide telemetry: build info, the number of collections and request counters by default; pass `details_level` 1 or more for per-collection stats, memory and hardware usage (verified: they are null at the default level). Not tied to any one collection.\n\nExample: {}",
     "read_only": true,
     "destructive": false,
     "idempotent": true
@@ -426,9 +426,9 @@
   {
     "name": "qdrant_quotas_set",
     "toolset": "observability",
-    "description": "Update server-wide resource quotas. Only the fields you pass are changed; omitted ones keep their current value.\n\nExample: {\"enabled\": true, \"max_resident_memory_percent\": 90}",
+    "description": "Replace the server-wide resource quotas. The whole config is replaced, not merged (verified): every field you omit is reset — limits become unset and `enabled` becomes false. Read the current values with `qdrant_quotas_get` and pass every field you want to keep.\n\nExample: {\"enabled\": true, \"max_resident_memory_percent\": 90}",
     "read_only": false,
-    "destructive": false,
+    "destructive": true,
     "idempotent": true
   },
   {
