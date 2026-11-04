@@ -34,3 +34,7 @@ async def test_the_mcpb_launch_command_serves_tools() -> None:
         result = await session.call_tool("qdrant_health_check", {})
         assert result.structured_content is not None
         assert result.structured_content["ok"] is True
+        # Over the wire too, the text block is compact (what claude.ai and Desktop read).
+        [block] = result.content
+        assert block.type == "text"
+        assert block.text == json.dumps(result.structured_content, separators=(",", ":"))

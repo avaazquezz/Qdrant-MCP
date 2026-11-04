@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
+import pydantic_core
 from mcp.server import MCPServer
+from mcp.server.mcpserver.context import Context
+from mcp_types import CallToolResult, InputRequiredResult, TextContent
 
 from mcp_qdrant import __version__, guidance
 from mcp_qdrant.config import Settings
@@ -49,6 +53,24 @@ _TOOL_MODULES = (
 )
 
 
+class CompactTextMCPServer(MCPServer[None]):
+    """Sends a tool's text content as the compact JSON of its structured content.
+
+    The SDK renders the text block with `indent=2`, about twice the characters. Claude Code
+    reads `structuredContent`, but claude.ai and Desktop's local servers read the text block
+    (measured 2026-11-04), so there the indentation was paid in the model's context.
+    """
+
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any], context: Context[None, Any] | None = None
+    ) -> CallToolResult | InputRequiredResult:
+        result = await super().call_tool(name, arguments, context)
+        if isinstance(result, CallToolResult) and result.structured_content is not None:
+            text = pydantic_core.to_json(result.structured_content).decode()
+            result = result.model_copy(update={"content": [TextContent(type="text", text=text)]})
+        return result
+
+
 def build_server(settings: Settings | None = None) -> MCPServer[None]:
     """Construct the MCPServer: one shared AsyncQdrantClient, filtered toolsets."""
     settings = settings or Settings.from_env()
@@ -61,7 +83,7 @@ def build_server(settings: Settings | None = None) -> MCPServer[None]:
         finally:
             await client.close()
 
-    server: MCPServer[None] = MCPServer(
+    server: MCPServer[None] = CompactTextMCPServer(
         name=SERVER_NAME,
         version=__version__,
         lifespan=lifespan,
