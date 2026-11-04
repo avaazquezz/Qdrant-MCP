@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-11-04
+
+Text search: a model can now search a collection with a plain-text question and store plain text,
+instead of having to bring vectors it can't compute. Documents are still never parsed or chunked:
+one text is one point.
+
+### Added
+- `qdrant_query`, `qdrant_query_batch`, `qdrant_query_groups` and every `prefetch` stage take two
+  new modes: **`query_text`** (semantic search, embedded locally with the model the collection
+  declares) and **`bm25_query`** (keyword search ranked by BM25 over a text-indexed payload field,
+  Qdrant 1.20). Fused in one query they give hybrid search.
+- `qdrant_points_upsert` accepts **`text`** instead of `vector`: it is embedded with every model the
+  collection declares and stored in its text field.
+- `qdrant_collection_create` takes **`text_model`** (a `dense` vector sized for the model) and
+  **`text_language`** (a BM25 index with that language's stemmer, stopwords and accent folding);
+  `qdrant_collection_update` takes **`text_models`** to declare the model of an existing
+  collection's vectors, checking its size. The choice is stored in the collection's metadata, so the
+  same model is always used.
+- Optional extra **`mcp-qdrant[embeddings]`** (fastembed). The Docker image and the `.mcpb` bundle
+  include it; models are downloaded on first use into `FASTEMBED_CACHE_PATH` (`/models` in Docker).
+
+### Fixed
+- **The `.mcpb` bundle never started** (since v1.0.0): it ran `src/mcp_qdrant/cli.py` as a script,
+  which let this package's `qdrant_client.py` shadow the real `qdrant_client`. It now runs the
+  `mcp-qdrant` console script, and a test launches the server with the manifest's exact command.
+
 ## [2.7.1] - 2026-11-04
 
 An independent reviewer audited every behavioral claim in the tool descriptions written before
