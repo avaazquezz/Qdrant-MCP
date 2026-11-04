@@ -85,10 +85,11 @@ finding that shaped a decision (in Spanish).
 ## Requirements
 
 - **Python 3.12+**
-- **Qdrant server v1.19.0 or newer.** Two tools
+- **Qdrant server v1.19.0 or newer; tested against v1.20.0.** Two tools
   (`qdrant_collection_vector_create`/`qdrant_collection_vector_delete`) depend on an endpoint
   that returns `404` on older Qdrant servers (verified against v1.13.6 and v1.15.1) — everything
-  else works on older versions, but v1.19.0+ is the only version this project tests against.
+  else works on older versions. Tool descriptions state the behavior verified on v1.20.0, and say
+  so where v1.19 differed (alias batches, MMR with `offset`).
 
 ## Installation
 
@@ -208,6 +209,7 @@ immediately instead of surfacing later as a confusing tool error.
 | `QDRANT_MCP_SHARED_SECRET` | — | Yes, for `streamable-http` | Bearer token clients must send in the `Authorization` header. |
 | `QDRANT_MCP_HTTP_HOST` | `127.0.0.1` | No | Bind host for `streamable-http`. Use `0.0.0.0` in a container. |
 | `QDRANT_MCP_HTTP_PORT` | `8000` | No | Bind port for `streamable-http`. |
+| `QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS` | — | No | Comma-separated `http(s)` origins (e.g. `https://backups.example.com`) `qdrant_snapshot_recover` may restore from, besides `file://` paths and `QDRANT_URL`'s own origin. See [Security](#security). |
 | `QDRANT_MCP_MAX_LIMIT` | `1000` | No | Largest number of points one tool call may ask for (minimum 30, so every tool's default request fits) (`limit`, groups' `limit × group_size`, a batch's total, the number of ids, ...). A bigger request is refused with a message saying to page, not silently cut. |
 
 ¹ `QDRANT_URL` and `QDRANT_LOCAL_PATH` are mutually exclusive; if neither is set, the client
@@ -325,7 +327,14 @@ your database, set the flag, and there is no code path left for it to write anyt
 
 - **Mandatory authentication for `streamable-http`.** The server refuses to start without
   `QDRANT_MCP_SHARED_SECRET` — verified hands-on that an unauthenticated instance is trivially
-  usable by anyone with the URL.
+  usable by anyone with the URL. The bearer token is compared in constant time.
+- **No server-side request forgery through snapshot restores.** `qdrant_snapshot_recover` makes
+  the Qdrant server itself fetch `location`, so it only accepts `file://` paths, `QDRANT_URL`'s own
+  origin and the origins listed in `QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS` — not, say, a cloud
+  metadata endpoint on your internal network.
+- **No blind retries of writes.** A call is retried only when the request never reached Qdrant
+  (connection refused, connect timeout). A timeout after sending is reported as "may have been
+  applied" instead of being repeated, so a slow write can't run twice.
 - **Input validation everywhere.** Every tool's input is a Pydantic model — malformed input is
   rejected with a structured error before it reaches the Qdrant SDK.
 - **Read-only guard.** `QDRANT_MCP_READ_ONLY` removes every mutating tool from the registry —

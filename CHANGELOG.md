@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-11-04
+
+Robustness and security pass, and the move to Qdrant 1.20 (`qdrant-client` 1.20.0, CI against
+`qdrant/qdrant:v1.20.0`).
+
+### Changed
+- **Retries only when the request never reached Qdrant** (connection refused, connect or pool
+  timeout). `qdrant-client` reports every transport failure the same way — read timeouts and
+  unreadable responses included — and those used to be retried three times, even for writes: a
+  slow snapshot create or recover could be sent again while the first was still running. Now such
+  a failure returns an error saying the call may already have been applied.
+- **`qdrant_snapshot_recover` only restores from `file://` paths, `QDRANT_URL`'s own origin and the
+  origins listed in the new `QDRANT_MCP_SNAPSHOT_ALLOWED_ORIGINS`.** The Qdrant server fetches
+  `location` itself, so any URL let a model make it request internal addresses (SSRF). Restoring from
+  another host now needs that variable.
+- Qdrant 1.20 changed two behaviors the tool descriptions documented, both re-verified live:
+  `qdrant_alias_update` batches are now all-or-nothing (1.19 kept the earlier operations applied),
+  and `offset` pages through an MMR ranking (1.19 applied it inside the `limit` results). The
+  descriptions and the integration tests that pin them now state the 1.20 behavior.
+- The compact `Filter` schema lists the `substring` match condition added in Qdrant 1.20.
+
+### Fixed
+- A rate-limited request (HTTP 429 with `Retry-After`) and inputs `qdrant-client` rejects before
+  sending (e.g. a text `Document` for a dense model without fastembed) surfaced as the generic
+  "Error executing tool"; they now carry their message.
+- Four `assert`s on server answers became explicit errors (an `assert` is stripped under `python -O`
+  and loses its message in the MCP SDK).
+- The `streamable-http` bearer token is compared in constant time, and a non-ASCII `Authorization`
+  header gets a 401 instead of a 500.
+- Snapshot download URLs escape collection and snapshot names.
+
 ## [2.6.0] - 2026-10-20
 
 An independent review of the Fase 11–15 code (a second reader with no knowledge of my reasoning,
