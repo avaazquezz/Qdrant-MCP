@@ -672,7 +672,7 @@ e inserción, opt-in, sin parsear documentos ni decidir chunking).
 | 19 | `feat/context-diet` | v2.9.0 | respuestas más baratas en contexto (primero medir qué lee el cliente) |
 | 20 | `feat/advisor` | v2.10.0 | `qdrant_collection_doctor` y `qdrant_search_quality_eval` (recall@k, latencia) |
 | 21 | `feat/guidance` | v2.11.0 | `instructions` del servidor, prompts MCP, `title` de tool |
-| 22 | — | — | escaparate: escenarios nuevos, landing, vídeo, MCP Registry |
+| 22 | — | — | escaparate: escenarios nuevos, landing, vídeo (el MCP Registry se publica solo tras PyPI desde el 2026-11-04: `registry.yml`) |
 
 ### Fase 17 — `fix/robustness` → v2.7.0
 - `qdrant-client` 1.20.0 y CI contra `qdrant/qdrant:v1.20.0` (con los bumps de dependabot).
